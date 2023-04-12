@@ -99,7 +99,7 @@
 		    }
 		}
 
-		// 変数に質問文を格納
+	// 変数に質問文を格納
         const userMessage = String(args.message);
         $gameVariables.setValue(userMessageVarId, userMessage);
         messageHistory.push({ role: 'system', content: systemMessage });
@@ -110,14 +110,14 @@
             const originalCanMove = Game_Player.prototype.canMove;
             const originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
 
-			// 待機中、移動禁止・メニュー開閉禁止
+	    // 待機中、移動禁止・メニュー開閉禁止
             Game_Player.prototype.canMove = function () { return false; };
             Game_System.prototype.isMenuEnabled = function () { return false; };
 
             const event = $gameMap.event($gameMap._interpreter.eventId());
             event.setDirectionFix(true);
 
-			// 待機中、イベントの動きを制限
+	    // 待機中、イベントの動きを制限
             const originalUpdateStop = Game_CharacterBase.prototype.updateStop;
             Game_CharacterBase.prototype.updateStop = function () {
                 if ($gameMap._interpreter._waitMode === "chatGPT" || ($gameMessage && $gameMessage.isBusy())) {
@@ -131,7 +131,7 @@
             };
 			
 
-			// ウェイトウィンドウの作成
+	    // ウェイトウィンドウの作成
             let waitingWindow;
             if (showWaitingWindow) {
                 const messageWindow = SceneManager._scene._messageWindow;
@@ -158,7 +158,7 @@
                 event.setDirectionFix(true);
             }
             
-			// ChatGPT APIとの通信
+	    // ChatGPT APIとの通信
             const url = 'https://api.openai.com/v1/chat/completions';
 
             try {
@@ -203,10 +203,10 @@
                     }
                     let Message = jsonData.choices[0].message.content;
 
-					// カギ括弧除去※除去不要ならコメントアウト
+		    // カギ括弧除去※除去不要ならコメントアウト
                     Message = Message.replace(/\「|」/g, "");
                     
-					// 改行処理
+		    // 改行処理
                     Message = insertNewLines(Message, lineBreakLength);
 
                     if (Message) { $gameMessage.add(Message); }
