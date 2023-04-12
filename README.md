@@ -24,6 +24,6 @@
 <p>
 kotonoha*
 
-https://aokikotori.com/<br>
+URL:https://aokikotori.com/<br>
 Twitter：@rahaandsary
 </p>
