@@ -42,6 +42,7 @@
  */
 
 (() => {
+  
   const pluginName = 'InputDialog';
 
   PluginManager.registerCommand(pluginName, 'openDialog', args => {
