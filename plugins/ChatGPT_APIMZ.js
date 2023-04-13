@@ -103,7 +103,7 @@
 		    }
 		}
 
-	// 変数に質問文を格納
+		// 変数に質問文を格納
         const userMessage = String(args.message);
         $gameVariables.setValue(userMessageVarId, userMessage);
         messageHistory.push({ role: 'system', content: systemMessage });
@@ -111,21 +111,21 @@
 
         (async () => {
 			
-	    // ウェイトウィンドウの作成
+			// ウェイトウィンドウの作成
+	        const originalCanMove = Game_Player.prototype.canMove;
+	        const originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
+			const event = $gameMap.event($gameMap._interpreter.eventId());
+
             let waitingWindow;
             if (showWaitingWindow) {
             
-	            const originalCanMove = Game_Player.prototype.canMove;
-	            const originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
-
-		    // 待機中、移動禁止・メニュー開閉禁止
+				// 待機中、移動禁止・メニュー開閉禁止
 	            Game_Player.prototype.canMove = function () { return false; };
 	            Game_System.prototype.isMenuEnabled = function () { return false; };
 
-	            const event = $gameMap.event($gameMap._interpreter.eventId());
 	            event.setDirectionFix(true);
 
-		    // 待機中、イベントの動きを制限
+				// 待機中、イベントの動きを制限
 	            const originalUpdateStop = Game_CharacterBase.prototype.updateStop;
 	            Game_CharacterBase.prototype.updateStop = function () {
 	                if ($gameMap._interpreter._waitMode === "chatGPT" || ($gameMessage && $gameMessage.isBusy())) {
@@ -143,7 +143,7 @@
                 const offsetY = 4;
                 waitingWindow = new Window_Base(new Rectangle(messageWindow.x + offsetX, Graphics.height - messageWindow.height - offsetY, messageWindow.width, messageWindow.height));
 
-		// ウェイトメッセージ
+				// ウェイトメッセージ
                 waitingWindow.drawText('・・・', 0, 0);
                 SceneManager._scene.addChild(waitingWindow);
                 const waitMessages = ['・・・', '・・・・・・', '・・・・・・・・・'];
@@ -160,38 +160,38 @@
 
             }
             
-	    // ChatGPT APIとの通信
+			// ChatGPT APIとの通信
             const url = 'https://api.openai.com/v1/chat/completions';
 
             try {
-		const response = await fetch(url, {
-			method: 'POST',
-			headers: {
-			'Content-Type': 'application/json',
-			'Authorization': 'Bearer ' + getChatGPT_APIkey(),
-			},
-			body: JSON.stringify({
-			model: 'gpt-3.5-turbo', // モデルの選択
-			temperature: 0.9, // 温度
-			max_tokens: 240, // トークン
-			messages: messageHistory,
-			}),
-		});
+				const response = await fetch(url, {
+				    method: 'POST',
+				    headers: {
+				        'Content-Type': 'application/json',
+				        'Authorization': 'Bearer ' + getChatGPT_APIkey(),
+				    },
+				    body: JSON.stringify({
+				        model: 'gpt-3.5-turbo', // モデルの選択
+				        temperature: 0.9, // 温度
+				        max_tokens: 240, // トークン
+				        messages: messageHistory,
+				    }),
+				});
 
                 if (!response.ok) {
                     const errorText = await response.text();
-		    const errorJson = JSON.parse(errorText);
-		    const errorMessage = insertNewLines(errorJson.error.message,60);
-		    // APIからのメッセージを出力
-		    console.error('Error:', errorMessage);
-		    $gameMessage.add(errorMessage);
+				    const errorJson = JSON.parse(errorText);
+				    const errorMessage = insertNewLines(errorJson.error.message,60);
+				    // APIからのメッセージを出力
+				    console.error('Error:', errorMessage);
+				    $gameMessage.add(errorMessage);
                     if (showWaitingWindow) {
                         clearInterval(intervalId);
                         SceneManager._scene.removeChild(waitingWindow);
-	                Game_Player.prototype.canMove = originalCanMove;
-	                Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
-	                $gameMap._interpreter.setWaitMode("");
-	                event.setDirectionFix(false);
+	                    Game_Player.prototype.canMove = originalCanMove;
+	                    Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
+	                    $gameMap._interpreter.setWaitMode("");
+	                    event.setDirectionFix(false);
                     }
                     return;
                 }
@@ -205,21 +205,21 @@
                     }
                     let Message = jsonData.choices[0].message.content;
 
-		    // カギ括弧除去※除去不要ならコメントアウト
+					// カギ括弧除去※除去不要ならコメントアウト
                     Message = Message.replace(/\「|」/g, "");
-		    // 改行処理
-		    if (lineBreakLength > 0) {Message = insertNewLines(Message, lineBreakLength);}
+					// 改行処理
+					if (lineBreakLength > 0) {Message = insertNewLines(Message, lineBreakLength);}
 
                     if (Message) { $gameMessage.add(Message); }
 					
-			// ウェイトウィンドウがある時は行動制限解除
-			if (showWaitingWindow) {
+					// ウェイトウィンドウがある時は行動制限解除
+					if (showWaitingWindow) {
 	                    Game_Player.prototype.canMove = originalCanMove;
 	                    Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
 	                    $gameMap._interpreter.setWaitMode("");
 	                    event.setDirectionFix(false);
                 	}
-                    }
+                }
 
             } catch (error) {
             	
@@ -228,10 +228,10 @@
                 if (showWaitingWindow) {
                     clearInterval(intervalId);
                     SceneManager._scene.removeChild(waitingWindow);
-	            Game_Player.prototype.canMove = originalCanMove;
-	            Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
-	            $gameMap._interpreter.setWaitMode("");
-	            event.setDirectionFix(false);
+	                Game_Player.prototype.canMove = originalCanMove;
+	                Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
+	                $gameMap._interpreter.setWaitMode("");
+	                event.setDirectionFix(false);
                }
                return;
                
