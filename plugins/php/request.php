@@ -2,8 +2,9 @@
 
 	// --------------------------------------------------------------------------
 	// 
-	// ChatGPT APIに通信するPHPスクリプト
-	//
+	// ChatGPT_APIMZ オプションファイル
+	// ※ ChatGPT APIに通信するPHPスクリプト
+	// 
 	// Copyright (c) kotonoha*
 	// This software is released under the MIT License.
 	// http://opensource.org/licenses/mit-license.php
