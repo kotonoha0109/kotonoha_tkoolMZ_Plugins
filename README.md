@@ -7,9 +7,8 @@
 | ファイル名 | 概要 |
 | ------------- | -------------------------- |
 | ChatGPT_APIMZ.js  | ChatGPT APIと通信し、AIに台詞を作成してもらうプラグイン  |
-| ChatGPT_APIMZ_Stream.js  | ChatGPT APIと通信し、AIに台詞を作成してもらうプラグイン（Stream版）  |
 | InputDialog.js  | キーボードで文字を入力し、入力内容を変数に格納するプラグイン |
-
+| php/request.php  | ChatGPT_APIMZ.jsの通信部分をサーバーサイドで動作させるためのPHPスクリプト |
 
 
 
