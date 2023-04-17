@@ -138,7 +138,7 @@
  * 　空いている変数IDを MemoryMessageVarId にセットしてください。
  *
  * (3) AIに台詞を作ってもらいたいイベントに、プラグインコマンドで
- * 「ChatGPT_APIMZ_Stream」を選び、キャラクターの設定を登録してください。
+ * 「ChatGPT_APIMZ」を選び、キャラクターの設定を登録してください。
  * 
  * # system
  * イベントへの指示です。プラグインパラメータの SystemMessage に追記されますので、
