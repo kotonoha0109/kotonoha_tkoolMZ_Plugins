@@ -20,6 +20,7 @@
 // 				－APIとの通信中に処理が中断出来ない様にしました。
 //				－回答の表示・非表示をスイッチで制御できる様にしました。
 // 2023/04/18 ver1.01a エラー出力方法修正
+// 2023/04/18 ver1.01b 制御スイッチがONのまま通信を行うと、常時busyが解除される不具合を修正しました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -312,16 +313,8 @@
 			const ChatGPT_Model = String(pluginParameters['ChatGPT_Model']) || 'gpt-3.5-turbo';
 			const ChatGPT_URL = String(pluginParameters['ChatGPT_URL']) || 'https://api.openai.com/v1/chat/completions';
 
-			// 非出力スイッチがONの時はイベントを停止しない
-			if ($gameSwitches.value(visibleSwitchID) === true) {
-				originalCanMove = Game_Player.prototype.canMove;
-				originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
-				Game_Player.prototype.canMove = function () { return true; };
-				Game_System.prototype.isMenuEnabled = function () { return true; };
-				const event = $gameMap.event($gameMap._interpreter.eventId());
-				currentEvent = event;
-			} else {
-				// 非出力スイッチがOFFの時はイベントは停止する
+			// 非出力スイッチがOFFの時はイベントは停止する
+			if ($gameSwitches.value(visibleSwitchID) !== true) {
 				originalCanMove = Game_Player.prototype.canMove;
 				originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
 				Game_Player.prototype.canMove = function () { return false; };
@@ -486,13 +479,11 @@
 		if (isDoneReceived && streamingTextElement.scrollHeight - streamingTextElement.clientHeight <= streamingTextElement.scrollTop + 1) {
 			streamingTextElement.style.display = 'none';
 			streamingTextElement.innerHTML = '';
-
 			if (typeof currentEvent !== 'undefined' && currentEvent) {
 				currentEvent.setDirectionFix(false);
 				currentEvent._moveType = currentEvent._originalMoveType;
 				currentEvent = null;
 			}
-
 			Game_Player.prototype.canMove = originalCanMove;
 			Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
 		}
