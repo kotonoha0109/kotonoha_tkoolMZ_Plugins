@@ -19,6 +19,7 @@
 // 2023/04/18 ver1.01 仕様追加、修正
 // 				－APIとの通信中に処理が中断出来ない様にしました。
 //				－回答の表示・非表示をスイッチで制御できる様にしました。
+// 2023/04/18 ver1.01a エラー出力方法修正
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -319,8 +320,8 @@
 				Game_System.prototype.isMenuEnabled = function () { return true; };
 				const event = $gameMap.event($gameMap._interpreter.eventId());
 				currentEvent = event;
-			}else{
-			// 非出力スイッチがOFFの時はイベントは停止する
+			} else {
+				// 非出力スイッチがOFFの時はイベントは停止する
 				originalCanMove = Game_Player.prototype.canMove;
 				originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
 				Game_Player.prototype.canMove = function () { return false; };
@@ -357,17 +358,18 @@
 				if (!response.ok) {
 					const errorText = await response.text();
 					const errorJson = JSON.parse(errorText);
-					const errorMessage = insertNewLines(errorJson.error.message, 60);
+					let errorMessage = String(errorJson.error.message).slice(0, 30);
 					// APIからのメッセージを出力
 					console.error('Error:', errorMessage);
 					$gameMessage.add(errorMessage);
 					isDoneReceived = true;
+					unlockControlsIfNeeded();
 					return;
 				}
 
 				// イベント実行時にストリーミングウィンドウを表示する
 				const streamingTextElement = document.getElementById('streamingText');
-				if ($gameSwitches.value(visibleSwitchID) !== true) {streamingTextElement.style.display = 'block';}
+				if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
 				streamingTextElement.innerHTML = '';
 
 				const reader = response.body.getReader();
@@ -427,7 +429,11 @@
 
 			} catch (error) {
 				console.error('Error:', error);
+				let errorMessage = error;
+				// エラーメッセージをストリーミングテキスト要素に表示
+				$gameMessage.add(errorMessage);
 				isDoneReceived = true;
+				unlockControlsIfNeeded();
 				return;
 			}
 
