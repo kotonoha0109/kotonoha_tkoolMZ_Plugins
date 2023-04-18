@@ -16,6 +16,9 @@
 //				－AIからの回答に関連する値をプラグインコマンドで設定出来る様にしました。
 //				－イベントごとの質問・回答を変数に保存出来る様にしました。
 //				－長い台詞を出力する際に、スクロールバーを表示する様にしました。
+// 2023/04/18 ver1.01 仕様追加、修正
+// 				－APIとの通信中に処理が中断出来ない様にしました。
+//				－回答の表示・非表示をスイッチで制御できる様にしました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -55,6 +58,12 @@
  * @type variable
  * @default 3
  * @desc 回答履歴を格納する変数ID
+ *
+ * @param VisibleSwitchID
+ * @type switch
+ * @default 
+ * @desc 回答を非表示にするスイッチID
+ * 回答を表示せず、変数に格納したいだけの時に。
  *
  * @param SystemMessage
  * @type multiline_string
@@ -200,30 +209,37 @@
 
 (() => {
 
-    const pluginParameters = PluginManager.parameters('ChatGPT_APIMZ');
-    const userMessageVarId = Number(pluginParameters['UserMessageVarId']) || 1;
-    const answerMessageVarId = Number(pluginParameters['AnswerMessageVarId']) || 2;
-    const memoryMessageVarId = Number(pluginParameters['MemoryMessageVarId']) || 3;
+	const pluginParameters = PluginManager.parameters('ChatGPT_APIMZ');
+	const userMessageVarId = Number(pluginParameters['UserMessageVarId']) || 1;
+	const answerMessageVarId = Number(pluginParameters['AnswerMessageVarId']) || 2;
+	const memoryMessageVarId = Number(pluginParameters['MemoryMessageVarId']) || 3;
+	const visibleSwitchID = Number(pluginParameters['VisibleSwitchID']) || null;
 
-    const systemMessage = String(pluginParameters['SystemMessage']) || "Please answer in Japanese.";
+	const systemMessage = String(pluginParameters['SystemMessage']) || "Please answer in Japanese.";
 	let previousMessage = null;
 
-    PluginManager.registerCommand("ChatGPT_APIMZ", "chat", async (args) => {
-		
+	let isDoneReceived = false;
+	let originalCanMove;
+	let originalIsMenuEnabled;
+
+	PluginManager.registerCommand("ChatGPT_APIMZ", "chat", async (args) => {
+
+		isDoneReceived = false;
+
 		const customMemoryMessageVarId = Number(args.CustomMemoryMessageVarId) || memoryMessageVarId;
 		let customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
 
 		function getChatGPT_APIkey() {
-		    const APIKey = String(pluginParameters['ChatGPT_APIkey']) || 'sk-';
-		    const apiKeyVarId = parseInt(APIKey, 10);
+			const APIKey = String(pluginParameters['ChatGPT_APIkey']) || 'sk-';
+			const apiKeyVarId = parseInt(APIKey, 10);
 
-		    if (Number.isInteger(apiKeyVarId) && $gameVariables && $gameVariables.value(apiKeyVarId)) {
-		        return $gameVariables.value(apiKeyVarId);
-		    } else {
-		        return APIKey;
-		    }
+			if (Number.isInteger(apiKeyVarId) && $gameVariables && $gameVariables.value(apiKeyVarId)) {
+				return $gameVariables.value(apiKeyVarId);
+			} else {
+				return APIKey;
+			}
 		}
-        
+
 		const temperature = Number(args.temperature) || 1;
 		const top_p = Number(args.top_p) || 0.9;
 		const max_tokens = Number(args.max_tokens) || 512;
@@ -236,225 +252,245 @@
 
 		// 変数IDが未定義の場合は、質問にmessageを反映する
 		if (targetVarId !== 0 && !variableValue) {
-			if (!args.message || args.message === '') {return;}
-		    userMessage = args.message;
+			if (!args.message || args.message === '') { return; }
+			userMessage = args.message;
 		} else if (targetVarId === 0 && (!args.message || args.message === '')) {
-		    // 変数もmessageも空なら処理から抜ける
-		    //console.log("empty");
-		    return;
+			// 変数もmessageも空なら処理から抜ける
+			//console.log("empty");
+			return;
 		} else {
 			// それ以外は変数customQuestionMessageVarIdを質問に反映
-		    userMessage = variableValue ? variableValue : args.message;
+			userMessage = variableValue ? variableValue : args.message;
 		}
-		
+
 		$gameVariables.setValue(targetVarId, userMessage);
 
 		if (userMessageVarId !== null) {
 			$gameVariables.setValue(userMessageVarId, userMessage);
 		}
-        
-			// memory_talk使わない
-			if (Number(args.CustomMemoryMessageVarId) === 0) {
-	        	$gameVariables.setValue(memoryMessageVarId, []);
-	        	previousMessage = "";
-	        	customMemoryMessage = [];
-	        	customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
-	        	customMemoryMessage.push({ role: 'user', content: userMessage });
-	        	$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
-			}else{
-			
+
+		// memory_talk使わない
+		if (Number(args.CustomMemoryMessageVarId) === 0) {
+			$gameVariables.setValue(memoryMessageVarId, []);
+			previousMessage = "";
+			customMemoryMessage = [];
+			customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
+			customMemoryMessage.push({ role: 'user', content: userMessage });
+			$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
+		} else {
+
 			// memory_talk使う
 			if (!Array.isArray(customMemoryMessage)) {
-	        	customMemoryMessage = [];
-	        	previousMessage = "";
-	        	customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
-	        	customMemoryMessage.push({ role: 'user', content: userMessage });
-	        	$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);	        	
-        	}
-        	
-        	// 再質問生成
+				customMemoryMessage = [];
+				previousMessage = "";
+				customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
+				customMemoryMessage.push({ role: 'user', content: userMessage });
+				$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
+			}
+
+			// 再質問生成
 			const memoryTalk = Number(args.memory_talk) * 2 || 1;
 
-				if (memoryTalk >= 2) {
-			        if (previousMessage) {
-				        customMemoryMessage.push({ role: 'assistant', content: previousMessage });
-				        customMemoryMessage.push({ role: 'user', content: userMessage });
-						while (customMemoryMessage.length > memoryTalk) {
-							customMemoryMessage.shift();
-						}
+			if (memoryTalk >= 2) {
+				if (previousMessage) {
+					customMemoryMessage.push({ role: 'assistant', content: previousMessage });
+					customMemoryMessage.push({ role: 'user', content: userMessage });
+					while (customMemoryMessage.length > memoryTalk) {
+						customMemoryMessage.shift();
 					}
 				}
+			}
 
 		}
 
 		$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
 		//console.log(customMemoryMessage);
-        
-        (async () => {
+
+		(async () => {
 
 			const ChatGPT_Model = String(pluginParameters['ChatGPT_Model']) || 'gpt-3.5-turbo';
 			const ChatGPT_URL = String(pluginParameters['ChatGPT_URL']) || 'https://api.openai.com/v1/chat/completions';
-			
-			// 待機中、移動禁止・メニュー開閉禁止
-			const originalCanMove = Game_Player.prototype.canMove;
-			const originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
-            Game_Player.prototype.canMove = function () { return false; };
-            Game_System.prototype.isMenuEnabled = function () { return false; };
-			
-			// ストリーミング中はイベントの動きをを停止
-            const event = $gameMap.event($gameMap._interpreter.eventId());
-            currentEvent = event;
-            event.setDirectionFix(true); // 向き固定
-		    event._originalMoveType = event._moveType; // イベントの移動タイプを保存
-		    event._moveType = 0; // 停止
-            
-			// ChatGPT APIとの通信
-            const url = ChatGPT_URL;
 
-            try {
+			// 非出力スイッチがONの時はイベントを停止しない
+			if ($gameSwitches.value(visibleSwitchID) === true) {
+				originalCanMove = Game_Player.prototype.canMove;
+				originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
+				Game_Player.prototype.canMove = function () { return true; };
+				Game_System.prototype.isMenuEnabled = function () { return true; };
+				const event = $gameMap.event($gameMap._interpreter.eventId());
+				currentEvent = event;
+			}else{
+			// 非出力スイッチがOFFの時はイベントは停止する
+				originalCanMove = Game_Player.prototype.canMove;
+				originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
+				Game_Player.prototype.canMove = function () { return false; };
+				Game_System.prototype.isMenuEnabled = function () { return false; };
+				// ストリーミング中はイベントの動きを停止
+				const event = $gameMap.event($gameMap._interpreter.eventId());
+				currentEvent = event;
+				event.setDirectionFix(true); // 向き固定
+				event._originalMoveType = event._moveType; // イベントの移動タイプを保存
+				event._moveType = 0; // 停止
+			}
+
+			// ChatGPT APIとの通信
+			const url = ChatGPT_URL;
+
+			try {
 
 				const response = await fetch(url, {
-				    method: 'POST',
-				    headers: {
-				        'Content-Type': 'application/json',
-				        'Authorization': 'Bearer ' + getChatGPT_APIkey(),
-				    },
-				    body: JSON.stringify({
-				        model: ChatGPT_Model,
-				        temperature: temperature,
-				       	top_p: top_p,
-				       	max_tokens: max_tokens,
-				        stream: true,
-				        messages: customMemoryMessage,
-				    }),
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'Authorization': 'Bearer ' + getChatGPT_APIkey(),
+					},
+					body: JSON.stringify({
+						model: ChatGPT_Model,
+						temperature: temperature,
+						top_p: top_p,
+						max_tokens: max_tokens,
+						stream: true,
+						messages: customMemoryMessage,
+					}),
 				});
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-				    const errorJson = JSON.parse(errorText);
-				    const errorMessage = insertNewLines(errorJson.error.message,60);
-				    // APIからのメッセージを出力
-				    console.error('Error:', errorMessage);
-				    $gameMessage.add(errorMessage);
-				    
-				    // イベント再開
-                    Game_Player.prototype.canMove = originalCanMove;
-                    Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
-                    if (typeof currentEvent !== 'undefined' && currentEvent) {
-			            currentEvent.setDirectionFix(false);
-			            currentEvent._moveType = currentEvent._originalMoveType;
-			            currentEvent = null;
-		        	}
-                    return;
-                }
+				if (!response.ok) {
+					const errorText = await response.text();
+					const errorJson = JSON.parse(errorText);
+					const errorMessage = insertNewLines(errorJson.error.message, 60);
+					// APIからのメッセージを出力
+					console.error('Error:', errorMessage);
+					$gameMessage.add(errorMessage);
+					isDoneReceived = true;
+					return;
+				}
 
 				// イベント実行時にストリーミングウィンドウを表示する
 				const streamingTextElement = document.getElementById('streamingText');
-				streamingTextElement.style.display = 'block';
+				if ($gameSwitches.value(visibleSwitchID) !== true) {streamingTextElement.style.display = 'block';}
 				streamingTextElement.innerHTML = '';
 
 				const reader = response.body.getReader();
 				const textDecoder = new TextDecoder();
 				let buffer = '';
 
-			while (true) {
-			    const { value, done } = await reader.read();
+				while (true) {
+					const { value, done } = await reader.read();
 
-			    if (done) {
-			      break;
-			    }
+					if (done) {
+						break;
+					}
 
-			    buffer += textDecoder.decode(value, { stream: true });
+					buffer += textDecoder.decode(value, { stream: true });
 
-			    while (true) {
-			      const newlineIndex = buffer.indexOf('\n');
-			      if (newlineIndex === -1) {
-			        break;
-			      }
+					while (true) {
+						const newlineIndex = buffer.indexOf('\n');
+						if (newlineIndex === -1) {
+							break;
+						}
 
-			      const line = buffer.slice(0, newlineIndex);
-			      buffer = buffer.slice(newlineIndex + 1);
+						const line = buffer.slice(0, newlineIndex);
+						buffer = buffer.slice(newlineIndex + 1);
 
-			      if (line.startsWith('data:')) {
-					
-					// ストリーミングテキストの終端に達した時はイベントを再開
-			        if (line.includes('[DONE]')) {
-			        	//console.log(messageHistory);
-			        	previousMessage = streamingTextElement.innerHTML;
-			        	// 回答を変数IDに代入
-						let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
-						$gameVariables.setValue(targetAnswerVarId, previousMessage);
-						Game_Player.prototype.canMove = originalCanMove;
-						Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;						
-						return;
-			        }
+						if (line.startsWith('data:')) {
 
-			        const jsonData = JSON.parse(line.slice(5));
+							// ストリーミングテキストの終端に達した時はイベントを再開
+							if (line.includes('[DONE]')) {
+								previousMessage = streamingTextElement.innerHTML;
+								// 回答を変数IDに代入
+								let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
+								$gameVariables.setValue(targetAnswerVarId, previousMessage);
+								// イベント再開
+								isDoneReceived = true;
+								return;
+							}
 
-					// ストリーミングテキストの表示
-			        if (jsonData.choices && jsonData.choices[0].delta && jsonData.choices[0].delta.content) {
-						let assistantMessage = jsonData.choices[0].delta.content;
-						// カギ括弧除去※除去不要ならコメントアウト
-						assistantMessage = assistantMessage.replace(/\「|」/g, "");
-						// 改行を<br>に変換
-						assistantMessage = assistantMessage.replace(/\n/g, "<br>");
-						streamingTextElement.innerHTML += assistantMessage;
-						
-						setTimeout(() => {
-					        streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
-					    }, 0);
-						
-			        }
-			        
-			      }
-			    }
-			  }
+							const jsonData = JSON.parse(line.slice(5));
 
-            } catch (error) {
-            	
-                console.error('Error:', error);
-                return;
-                // イベント再開
-                Game_Player.prototype.canMove = originalCanMove;
-                Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
-                if (typeof currentEvent !== 'undefined' && currentEvent) {
-	            	currentEvent.setDirectionFix(false);
-	            	currentEvent._moveType = currentEvent._originalMoveType;
-	            	currentEvent = null;
-        		}
+							// ストリーミングテキストの表示
+							if (jsonData.choices && jsonData.choices[0].delta && jsonData.choices[0].delta.content) {
+								let assistantMessage = jsonData.choices[0].delta.content;
+								// カギ括弧除去※除去不要ならコメントアウト
+								assistantMessage = assistantMessage.replace(/\「|」/g, "");
+								// 改行を<br>に変換
+								assistantMessage = assistantMessage.replace(/\n/g, "<br>");
+								streamingTextElement.innerHTML += assistantMessage;
 
-            }
+								setTimeout(() => {
+									streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
+								}, 0);
 
-        })();
+							}
+						}
+					}
+				}
 
-    });
+			} catch (error) {
+				console.error('Error:', error);
+				isDoneReceived = true;
+				return;
+			}
 
-	// メッセージウィンドウ表示中はbusy状態にする
+			// メッセージウィンドウ表示中はbusy状態にする
+			const _Scene_Map_create = Scene_Map.prototype.create;
+			Scene_Map.prototype.create = function () {
+				_Scene_Map_create.call(this);
+			};
+
+			const _Scene_Map_update = Scene_Map.prototype.update;
+			Scene_Map.prototype.update = function () {
+				_Scene_Map_update.call(this);
+				if (Input.isTriggered("ok") && streamingTextElement && streamingTextElement.style.display !== "none") {
+					unlockControlsIfNeeded();
+				}
+			};
+
+			const _Game_Map_isEventRunning = Game_Map.prototype.isEventRunning;
+			Game_Map.prototype.isEventRunning = function () {
+				const isElementVisible = streamingTextElement && streamingTextElement.style.display !== "none";
+				return _Game_Map_isEventRunning.call(this) || isElementVisible;
+			};
+
+		})();
+
+	});
+
+	// 処理終了後のシーン更新処理
 	const _Scene_Map_create = Scene_Map.prototype.create;
 	Scene_Map.prototype.create = function () {
-	    _Scene_Map_create.call(this);
+		_Scene_Map_create.call(this);
 	};
 
 	const _Scene_Map_update = Scene_Map.prototype.update;
 	Scene_Map.prototype.update = function () {
-	    _Scene_Map_update.call(this);
-	    // キー入力でウィンドウ終了・イベント再開
-	    if (Input.isTriggered("ok") && streamingTextElement && streamingTextElement.style.display !== "none") {
-			streamingTextElement.style.display = 'none';
-			streamingTextElement.innerHTML = '';
-			if (typeof currentEvent !== 'undefined' && currentEvent) {
-            	currentEvent.setDirectionFix(false);
-            	currentEvent._moveType = currentEvent._originalMoveType;
-            	currentEvent = null;
-        	}
-	    }
+		_Scene_Map_update.call(this);
+		if (Input.isTriggered("ok") && streamingTextElement && streamingTextElement.style.display !== "none") {
+			unlockControlsIfNeeded();
+		}
 	};
 
 	const _Game_Map_isEventRunning = Game_Map.prototype.isEventRunning;
-	Game_Map.prototype.isEventRunning = function() {
-	    const isElementVisible = streamingTextElement && streamingTextElement.style.display !== "none";
-	    return _Game_Map_isEventRunning.call(this) || isElementVisible;
+	Game_Map.prototype.isEventRunning = function () {
+		const isElementVisible = streamingTextElement && streamingTextElement.style.display !== "none";
+		return _Game_Map_isEventRunning.call(this) || isElementVisible;
 	};
+
+	// イベント再開処理
+	function unlockControlsIfNeeded() {
+		if (isDoneReceived && streamingTextElement.scrollHeight - streamingTextElement.clientHeight <= streamingTextElement.scrollTop + 1) {
+			streamingTextElement.style.display = 'none';
+			streamingTextElement.innerHTML = '';
+
+			if (typeof currentEvent !== 'undefined' && currentEvent) {
+				currentEvent.setDirectionFix(false);
+				currentEvent._moveType = currentEvent._originalMoveType;
+				currentEvent = null;
+			}
+
+			Game_Player.prototype.canMove = originalCanMove;
+			Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
+		}
+	}
 
 	// ストリーミングウィンドウの生成
 	function createStreamingTextElement() {
