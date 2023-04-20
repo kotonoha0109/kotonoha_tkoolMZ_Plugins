@@ -411,8 +411,6 @@
 							if (jsonData.choices && jsonData.choices[0].delta && jsonData.choices[0].delta.content) {
 								let assistantMessage = jsonData.choices[0].delta.content;
 								// カギ括弧除去※除去不要ならコメントアウト
-								assistantMessage = assistantMessage.replace(/</g, "");
-								assistantMessage = assistantMessage.replace(/>/g, "");
 								assistantMessage = assistantMessage.replace(/\「|」/g, "");
 								// 改行を<br>に変換
 								assistantMessage = assistantMessage.replace(/\n/g, "<br>");
