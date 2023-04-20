@@ -307,7 +307,7 @@
 			$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
 		}
 
-		console.log(customMemoryMessage);
+		//console.log(customMemoryMessage);
 
 		(async () => {
 
