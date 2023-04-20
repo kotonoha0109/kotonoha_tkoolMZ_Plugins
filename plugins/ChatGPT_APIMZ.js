@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js
+// ChatGPT_APIMZ.js v1.01c
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -21,6 +21,8 @@
 //				－回答の表示・非表示をスイッチで制御できる様にしました。
 // 2023/04/18 ver1.01a エラー出力方法修正
 // 2023/04/18 ver1.01b 制御スイッチがONのまま通信を行うと、常時busyが解除される不具合を修正しました。
+// 2023/04/20 ver1.01c 仕様修正
+//				－memory_talkが0のイベントの回答が記録されていた不具合を修正しました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -228,9 +230,6 @@
 
 		isDoneReceived = false;
 
-		const customMemoryMessageVarId = Number(args.CustomMemoryMessageVarId) || memoryMessageVarId;
-		let customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
-
 		function getChatGPT_APIkey() {
 			const APIKey = String(pluginParameters['ChatGPT_APIkey']) || 'sk-';
 			const apiKeyVarId = parseInt(APIKey, 10);
@@ -271,8 +270,11 @@
 			$gameVariables.setValue(userMessageVarId, userMessage);
 		}
 
-		// memory_talk使わない
-		if (Number(args.CustomMemoryMessageVarId) === 0) {
+		// 記憶関連処理
+		const customMemoryMessageVarId = Number(args.CustomMemoryMessageVarId) || memoryMessageVarId;
+		let customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
+
+		if (Number(args.CustomMemoryMessageVarId) === 0 || !args.memory_talk) {
 			$gameVariables.setValue(memoryMessageVarId, []);
 			previousMessage = "";
 			customMemoryMessage = [];
@@ -280,33 +282,32 @@
 			customMemoryMessage.push({ role: 'user', content: userMessage });
 			$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
 		} else {
+			customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
 
-			// memory_talk使う
 			if (!Array.isArray(customMemoryMessage)) {
 				customMemoryMessage = [];
 				previousMessage = "";
 				customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
 				customMemoryMessage.push({ role: 'user', content: userMessage });
-				$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
-			}
+			} else {
+				const memoryTalk = Number(args.memory_talk) * 2 || 1;
 
-			// 再質問生成
-			const memoryTalk = Number(args.memory_talk) * 2 || 1;
-
-			if (memoryTalk >= 2) {
-				if (previousMessage) {
-					customMemoryMessage.push({ role: 'assistant', content: previousMessage });
-					customMemoryMessage.push({ role: 'user', content: userMessage });
-					while (customMemoryMessage.length > memoryTalk) {
-						customMemoryMessage.shift();
+				if (memoryTalk >= 2) {
+					if (previousMessage) {
+						//customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
+						customMemoryMessage.push({ role: 'assistant', content: previousMessage });
+						customMemoryMessage.push({ role: 'user', content: userMessage });
+						while (customMemoryMessage.length > memoryTalk) {
+							customMemoryMessage.shift();
+						}
 					}
 				}
 			}
 
+			$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
 		}
 
-		$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
-		//console.log(customMemoryMessage);
+		console.log(customMemoryMessage);
 
 		(async () => {
 
@@ -368,6 +369,8 @@
 				const reader = response.body.getReader();
 				const textDecoder = new TextDecoder();
 				let buffer = '';
+				let tagBuffer = '';
+				let tagMode = false;
 
 				while (true) {
 					const { value, done } = await reader.read();
@@ -391,7 +394,9 @@
 
 							// ストリーミングテキストの終端に達した時はイベントを再開
 							if (line.includes('[DONE]')) {
-								previousMessage = streamingTextElement.innerHTML;
+								if (Number(args.CustomMemoryMessageVarId) !== 0 && args.memory_talk) {
+									previousMessage = streamingTextElement.innerHTML;
+								}
 								// 回答を変数IDに代入
 								let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
 								$gameVariables.setValue(targetAnswerVarId, previousMessage);
@@ -406,10 +411,13 @@
 							if (jsonData.choices && jsonData.choices[0].delta && jsonData.choices[0].delta.content) {
 								let assistantMessage = jsonData.choices[0].delta.content;
 								// カギ括弧除去※除去不要ならコメントアウト
+								assistantMessage = assistantMessage.replace(/</g, "");
+								assistantMessage = assistantMessage.replace(/>/g, "");
 								assistantMessage = assistantMessage.replace(/\「|」/g, "");
 								// 改行を<br>に変換
 								assistantMessage = assistantMessage.replace(/\n/g, "<br>");
 								streamingTextElement.innerHTML += assistantMessage;
+								//console.log(assistantMessage);
 
 								setTimeout(() => {
 									streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
