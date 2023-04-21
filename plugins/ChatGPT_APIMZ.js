@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.02
+// ChatGPT_APIMZ.js v1.03
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -27,6 +27,9 @@
 //				－プラグインパラメータに「自動改行」「NG文字」を追加しました。
 //				－systemロールの仕様を見直し、精度を向上しました。
 //				－assistantロールの生成方法を修正しました。
+// 2023/04/22 ver1.03 仕様修正
+//				－コードの最適化を行いました。
+//				－ウィンドウカスタマイズに関する記述を追加しました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -213,6 +216,14 @@
  * 直接的なコールは出来ません。
  * 履歴を手動で削除したい場合はこの変数IDの変数を空にしてください。
  * 
+ * 【メッセージウィンドウのカスタマイズ】
+ * メッセージウィンドウの幅や高さ、位置、背景色をカスタマイズしたい場合は、
+ * function createStreamingTextElement() の中身を修正してください。
+ * ウィンドウ調整ツールをご利用ください。
+ * 
+ * ▼ウィンドウ調整ツール
+ * https://aokikotori.com/chatgpt_apimz_window/
+ * 
  * 【サーバーサイドとの連携】
  * サーバー上にPHPやPython等のファイルを設置し、
  * APIキーなど、ChatGPTへのリクエストヘッダをシークレットにする事が出来ます。
@@ -238,7 +249,6 @@
 
 	const systemMessage = String(pluginParameters['SystemMessage']) || "Please answer in Japanese.";
 	let previousMessage = null;
-
 	let isDoneReceived = false;
 	let originalCanMove;
 	let originalIsMenuEnabled;
@@ -246,17 +256,6 @@
 	PluginManager.registerCommand("ChatGPT_APIMZ", "chat", async (args) => {
 
 		isDoneReceived = false;
-
-		function getChatGPT_APIkey() {
-			const APIKey = String(pluginParameters['ChatGPT_APIkey']) || 'sk-';
-			const apiKeyVarId = parseInt(APIKey, 10);
-
-			if (Number.isInteger(apiKeyVarId) && $gameVariables && $gameVariables.value(apiKeyVarId)) {
-				return $gameVariables.value(apiKeyVarId);
-			} else {
-				return APIKey;
-			}
-		}
 
 		const temperature = Number(args.temperature) || 1;
 		const top_p = Number(args.top_p) || 0.9;
@@ -326,7 +325,6 @@
 					}
 				}
 			}
-
 			$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
 		}
 
@@ -373,7 +371,6 @@
 				});
 				//console.log(customMemoryMessage);
 
-
 				if (!response.ok) {
 					const errorText = await response.text();
 					const errorJson = JSON.parse(errorText);
@@ -395,22 +392,20 @@
 				const textDecoder = new TextDecoder();
 				let buffer = '';
 				let streamBuffer = '';
+				const textArray = [];
 
 				while (true) {
+
 					const { value, done } = await reader.read();
-
-					if (done) {
-						break;
-					}
-
+					if (done) { break; }
 					buffer += textDecoder.decode(value, { stream: true });
 
-					while (true) {
-						const newlineIndex = buffer.indexOf('\n');
-						if (newlineIndex === -1) {
-							break;
-						}
+					let newlineIndex;
 
+					do {
+
+						newlineIndex = buffer.indexOf('\n');
+						if (newlineIndex === -1) { break; }
 						const line = buffer.slice(0, newlineIndex);
 						buffer = buffer.slice(newlineIndex + 1);
 
@@ -420,7 +415,6 @@
 							if (line.includes('[DONE]')) {
 								if (Number(args.CustomMemoryMessageVarId) !== 0 && args.memory_talk) {
 									previousMessage = streamBuffer;
-									//previousMessage = streamingTextElement.innerHTML;
 								}
 								// 回答を変数IDに代入
 								let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
@@ -440,31 +434,22 @@
 								streamBuffer += assistantMessage;
 
 								// 改行を<br>に変換
-								if (brstr === true) {
-									assistantMessage = assistantMessage.replace(/\n/g, "<br>");
-								}
-
-								const removeChars = (str, chars) => {
-									const escapeRegExp = (str) => {
-										return str.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
-									};
-
-									const escapedChars = escapeRegExp(chars);
-									const regex = new RegExp(`[${escapedChars}]`, 'g');
-									return str.replace(regex, '');
-								}
+								if (brstr === true) { assistantMessage = assistantMessage.replace(/\n/g, "<br>"); }
 								assistantMessage = removeChars(assistantMessage, replacestr);
 
-								streamingTextElement.innerHTML += assistantMessage;
+								// 出力
+								textArray.push(assistantMessage);
+								streamingTextElement.innerHTML = textArray.join('');
 								//console.log(assistantMessage);
 
-								setTimeout(() => {
+								// 出力に合わせてスクロール
+								requestAnimationFrame(() => {
 									streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
-								}, 0);
+								});
 
 							}
 						}
-					}
+					} while (newlineIndex !== -1);
 				}
 
 			} catch (error) {
@@ -478,11 +463,6 @@
 			}
 
 			// メッセージウィンドウ表示中はbusy状態にする
-			const _Scene_Map_create = Scene_Map.prototype.create;
-			Scene_Map.prototype.create = function () {
-				_Scene_Map_create.call(this);
-			};
-
 			const _Scene_Map_update = Scene_Map.prototype.update;
 			Scene_Map.prototype.update = function () {
 				_Scene_Map_update.call(this);
@@ -501,12 +481,28 @@
 
 	});
 
-	// 処理終了後のシーン更新処理
-	const _Scene_Map_create = Scene_Map.prototype.create;
-	Scene_Map.prototype.create = function () {
-		_Scene_Map_create.call(this);
-	};
+	// APIキーの代入
+	function getChatGPT_APIkey() {
+		const APIKey = String(pluginParameters['ChatGPT_APIkey']) || 'sk-';
+		const apiKeyVarId = parseInt(APIKey, 10);
+		if (Number.isInteger(apiKeyVarId) && $gameVariables && $gameVariables.value(apiKeyVarId)) {
+			return $gameVariables.value(apiKeyVarId);
+		} else {
+			return APIKey;
+		}
+	}
 
+	// NG文字を除去する
+	const removeChars = (str, chars) => {
+		const escapeRegExp = (str) => {
+			return str.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
+		};
+		const escapedChars = escapeRegExp(chars);
+		const regex = new RegExp(`[${escapedChars}]`, 'g');
+		return str.replace(regex, '');
+	}
+
+	// 処理終了後のシーン更新処理
 	const _Scene_Map_update = Scene_Map.prototype.update;
 	Scene_Map.prototype.update = function () {
 		_Scene_Map_update.call(this);
