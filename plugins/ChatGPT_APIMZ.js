@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.01c
+// ChatGPT_APIMZ.js v1.02
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -23,6 +23,10 @@
 // 2023/04/18 ver1.01b 制御スイッチがONのまま通信を行うと、常時busyが解除される不具合を修正しました。
 // 2023/04/20 ver1.01c 仕様修正
 //				－memory_talkが0のイベントの回答が記録されていた不具合を修正しました。
+// 2023/04/21 ver1.02 仕様追加、修正
+//				－プラグインパラメータに「自動改行」「NG文字」を追加しました。
+//				－systemロールの仕様を見直し、精度を向上しました。
+//				－assistantロールの生成方法を修正しました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -69,6 +73,18 @@
  * @desc 回答を非表示にするスイッチID
  * 回答を表示せず、変数に格納したいだけの時に。
  *
+ * @param BrStr
+ * @type boolean
+ * @default true
+ * @desc 自動改行
+ * 回答に改行コードが出力された時に改行処理を行います。
+ *
+ * @param ReplaceStr
+ * @type string
+ * @default 「」
+ * @desc NG文字
+ * 1文字ずつ判定。例えば「」と書くとカギ括弧が非表示になります。
+ *
  * @param SystemMessage
  * @type multiline_string
  * @default Please answer in Japanese.
@@ -82,7 +98,6 @@
  * @type multiline_string
  * @default 
  * @desc このイベントへの指示
- * ※プラグインパラメータのSystemMessageに「追記」されます。
  *
  * @arg message
  * @type multiline_string
@@ -218,6 +233,8 @@
 	const answerMessageVarId = Number(pluginParameters['AnswerMessageVarId']) || 2;
 	const memoryMessageVarId = Number(pluginParameters['MemoryMessageVarId']) || 3;
 	const visibleSwitchID = Number(pluginParameters['VisibleSwitchID']) || null;
+	const replacestr = String(pluginParameters['ReplaceStr']) || "「」";
+	const brstr = pluginParameters['BrStr'] === 'true' || pluginParameters['BrStr'] === true;
 
 	const systemMessage = String(pluginParameters['SystemMessage']) || "Please answer in Japanese.";
 	let previousMessage = null;
@@ -278,7 +295,11 @@
 			$gameVariables.setValue(memoryMessageVarId, []);
 			previousMessage = "";
 			customMemoryMessage = [];
-			customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
+			customMemoryMessage.push({ role: 'system', content: systemMessage });
+			// コマンド側systemロールを追加
+			if (args.system) {
+				customMemoryMessage.push({ role: 'system', content: (args.system || "") });
+			}
 			customMemoryMessage.push({ role: 'user', content: userMessage });
 			$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
 		} else {
@@ -287,14 +308,16 @@
 			if (!Array.isArray(customMemoryMessage)) {
 				customMemoryMessage = [];
 				previousMessage = "";
-				customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
+				customMemoryMessage.push({ role: 'system', content: systemMessage });
+				if (args.system) {
+					customMemoryMessage.push({ role: 'system', content: (args.system || "") });
+				}
 				customMemoryMessage.push({ role: 'user', content: userMessage });
 			} else {
 				const memoryTalk = Number(args.memory_talk) * 2 || 1;
 
 				if (memoryTalk >= 2) {
 					if (previousMessage) {
-						//customMemoryMessage.push({ role: 'system', content: systemMessage + (args.system || "") });
 						customMemoryMessage.push({ role: 'assistant', content: previousMessage });
 						customMemoryMessage.push({ role: 'user', content: userMessage });
 						while (customMemoryMessage.length > memoryTalk) {
@@ -348,6 +371,8 @@
 						messages: customMemoryMessage,
 					}),
 				});
+				//console.log(customMemoryMessage);
+
 
 				if (!response.ok) {
 					const errorText = await response.text();
@@ -369,8 +394,7 @@
 				const reader = response.body.getReader();
 				const textDecoder = new TextDecoder();
 				let buffer = '';
-				let tagBuffer = '';
-				let tagMode = false;
+				let streamBuffer = '';
 
 				while (true) {
 					const { value, done } = await reader.read();
@@ -395,7 +419,8 @@
 							// ストリーミングテキストの終端に達した時はイベントを再開
 							if (line.includes('[DONE]')) {
 								if (Number(args.CustomMemoryMessageVarId) !== 0 && args.memory_talk) {
-									previousMessage = streamingTextElement.innerHTML;
+									previousMessage = streamBuffer;
+									//previousMessage = streamingTextElement.innerHTML;
 								}
 								// 回答を変数IDに代入
 								let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
@@ -410,10 +435,26 @@
 							// ストリーミングテキストの表示
 							if (jsonData.choices && jsonData.choices[0].delta && jsonData.choices[0].delta.content) {
 								let assistantMessage = jsonData.choices[0].delta.content;
-								// カギ括弧除去※除去不要ならコメントアウト
-								assistantMessage = assistantMessage.replace(/\「|」/g, "");
+
+								// ストリームバッファとしてassistantロール用に別途保存
+								streamBuffer += assistantMessage;
+
 								// 改行を<br>に変換
-								assistantMessage = assistantMessage.replace(/\n/g, "<br>");
+								if (brstr === true) {
+									assistantMessage = assistantMessage.replace(/\n/g, "<br>");
+								}
+
+								const removeChars = (str, chars) => {
+									const escapeRegExp = (str) => {
+										return str.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
+									};
+
+									const escapedChars = escapeRegExp(chars);
+									const regex = new RegExp(`[${escapedChars}]`, 'g');
+									return str.replace(regex, '');
+								}
+								assistantMessage = removeChars(assistantMessage, replacestr);
+
 								streamingTextElement.innerHTML += assistantMessage;
 								//console.log(assistantMessage);
 
