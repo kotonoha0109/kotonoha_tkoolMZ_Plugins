@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.03
+// ChatGPT_APIMZ.js v1.04
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -8,21 +8,10 @@
 //
 // 2023/04/13 ver1.0β プラグイン公開
 // 2023/04/17 ver1.0 正式公開。仕様追加、修正
-//				－β版から正式版に切り替えました。
-//				－サーバーサイドで通信出来るオプションを追加しました。
-//				－イベントごとに会話履歴を保存できる様になりました。
-//				－messageHistoryを削除。変数の初期化に不備があったので修正しました。
-// 				－ストリーミング通信完了後のイベントの動きを修正しました。
-//				－AIからの回答に関連する値をプラグインコマンドで設定出来る様にしました。
-//				－イベントごとの質問・回答を変数に保存出来る様にしました。
-//				－長い台詞を出力する際に、スクロールバーを表示する様にしました。
 // 2023/04/18 ver1.01 仕様追加、修正
-// 				－APIとの通信中に処理が中断出来ない様にしました。
-//				－回答の表示・非表示をスイッチで制御できる様にしました。
 // 2023/04/18 ver1.01a エラー出力方法修正
 // 2023/04/18 ver1.01b 制御スイッチがONのまま通信を行うと、常時busyが解除される不具合を修正しました。
 // 2023/04/20 ver1.01c 仕様修正
-//				－memory_talkが0のイベントの回答が記録されていた不具合を修正しました。
 // 2023/04/21 ver1.02 仕様追加、修正
 //				－プラグインパラメータに「自動改行」「NG文字」を追加しました。
 //				－systemロールの仕様を見直し、精度を向上しました。
@@ -30,6 +19,10 @@
 // 2023/04/22 ver1.03 仕様修正
 //				－コードの最適化を行いました。
 //				－ウィンドウカスタマイズに関する記述を追加しました。
+// 2023/04/24 ver1.04 仕様修正
+//				－安定化のため一部のコードを以前の仕様に戻しました。
+//				－HTMLコードの出力に対応しました。
+//				－MZの制御文字3種（\N、\V、\P）の出力に対応しました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -439,13 +432,16 @@
 
 								// 出力
 								textArray.push(assistantMessage);
-								streamingTextElement.innerHTML = textArray.join('');
-								//console.log(assistantMessage);
+								const combinedText = textArray.join('');
+								const processedText = processControlCharacters(combinedText);
+
+								streamingTextElement.innerHTML = processedText;
+								//console.log(textArray);
 
 								// 出力に合わせてスクロール
-								requestAnimationFrame(() => {
+								setTimeout(() => {
 									streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
-								});
+								}, 0);
 
 							}
 						}
@@ -455,7 +451,6 @@
 			} catch (error) {
 				console.error('Error:', error);
 				let errorMessage = error;
-				// エラーメッセージをストリーミングテキスト要素に表示
 				$gameMessage.add(errorMessage);
 				isDoneReceived = true;
 				unlockControlsIfNeeded();
@@ -463,6 +458,11 @@
 			}
 
 			// メッセージウィンドウ表示中はbusy状態にする
+			const _Scene_Map_create = Scene_Map.prototype.create;
+			Scene_Map.prototype.create = function () {
+				_Scene_Map_create.call(this);
+			};
+
 			const _Scene_Map_update = Scene_Map.prototype.update;
 			Scene_Map.prototype.update = function () {
 				_Scene_Map_update.call(this);
@@ -502,7 +502,32 @@
 		return str.replace(regex, '');
 	}
 
+	function processControlCharacters(str) {
+		return str.replace(/\\([VNPI])\[(\d+)\]|\\G/g, function (matchedString, type, id) {
+			if (matchedString === '\\G') {
+			  return TextManager.currencyUnit;
+			}
+			const numId = Number(id);
+			switch (type) {
+				case 'V':
+					return String($gameVariables.value(numId));
+				case 'N':
+					return String($gameActors.actor(numId).name());
+				case 'P':
+					return String($gameParty.members()[numId - 1].name());
+				default:
+					return '';
+			}
+		});
+	}
+
+
 	// 処理終了後のシーン更新処理
+	const _Scene_Map_create = Scene_Map.prototype.create;
+	Scene_Map.prototype.create = function () {
+		_Scene_Map_create.call(this);
+	};
+
 	const _Scene_Map_update = Scene_Map.prototype.update;
 	Scene_Map.prototype.update = function () {
 		_Scene_Map_update.call(this);
@@ -549,7 +574,6 @@
 		streamingTextElement.style.color = 'white';
 		streamingTextElement.style.fontSize = '22px';
 		streamingTextElement.style.padding = '16px';
-		streamingTextElement.style.overflowY = 'hidden';
 		streamingTextElement.style.background = 'linear-gradient(to bottom, rgba(15,28,69,0.8), rgba(8,59,112,0.8))';
 		streamingTextElement.style.margin = '0 8px';
 		streamingTextElement.style.borderWidth = '2px';
