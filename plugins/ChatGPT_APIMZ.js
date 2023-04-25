@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.04
+// ChatGPT_APIMZ.js v1.05
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -19,10 +19,15 @@
 // 2023/04/22 ver1.03 仕様修正
 //				－コードの最適化を行いました。
 //				－ウィンドウカスタマイズに関する記述を追加しました。
-// 2023/04/24 ver1.04 仕様修正
+// 2023/04/24 ver1.04 仕様追加、修正
 //				－安定化のため一部のコードを以前の仕様に戻しました。
 //				－HTMLコードの出力に対応しました。
 //				－MZの制御文字3種（\N、\V、\P）の出力に対応しました。
+// 2023/04/25 ver1.05 仕様追加、修正
+//				－NG文字が空の時でもカギ括弧が非表示になる不具合を修正しました。
+//				－system、messageをMZの制御文字3種（\N、\V、\P）に対応しました。
+//				－messageの前後にmessage_before、message_afterを登録出来る様にしました。
+//				－回答の手前に文字を出力出来る様にしました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -77,7 +82,7 @@
  *
  * @param ReplaceStr
  * @type string
- * @default 「」
+ * @default 
  * @desc NG文字
  * 1文字ずつ判定。例えば「」と書くとカギ括弧が非表示になります。
  *
@@ -101,6 +106,23 @@
  * @desc このイベントへの質問　※CuatomQuestionMessageVarIdが0か、
  * 変数が空の時この質問が反映されます。
  *
+ * @arg message_before
+ * @type multiline_string
+ * @default 
+ * @desc この質問の手前に付加する内容
+ * 補足事項を入力する際に。
+ * 
+ * @arg message_after
+ * @type multiline_string
+ * @default
+ * @desc この質問の後ろに付加する内容
+ * 補足事項を入力する際に。
+ * 
+ * @arg displayHeader
+ * @type string
+ * @default
+ * @desc 回答の手前に表示する内容
+ * 
  * @arg temperature
  * @type Number
  * @default 1
@@ -175,6 +197,19 @@
  * ただし、変数CuatomQuestionMessageVarId に質問を入力して使う場合は、
  * この項目は空にしてください。
  * 
+ * # message_before, message_after
+ * イベントへの質問に変数を使う時、messageは変数の値に置き換えられてしまいます。
+ * systemに記述した内容はGPT-3モデルでは重要視されないため、
+ * 命令に従わない場合は、こちらに入力してみてください。
+ * 変数の前後に、messageロールに付加する文字列を設定します。
+ * たとえば、変数の値が「こんにちは」で、message_beforeが「あなたは」、
+ * message_afterが「ですか？」の場合、AIには「あなたはこんにちはですか？」と
+ * 質問されます。
+ * 
+ * # displayHeader
+ * メッセージウィンドウに表示するヘッダーです。
+ * 変数ID1の値を表示する場合は、\V[1]と入力してください。
+ * 
  * # temperature, top_p
  * それぞれ、AIからの回答における多様性を決める数値です。
  * 0～1の数値を設定してください。
@@ -237,7 +272,7 @@
 	const answerMessageVarId = Number(pluginParameters['AnswerMessageVarId']) || 2;
 	const memoryMessageVarId = Number(pluginParameters['MemoryMessageVarId']) || 3;
 	const visibleSwitchID = Number(pluginParameters['VisibleSwitchID']) || null;
-	const replacestr = String(pluginParameters['ReplaceStr']) || "「」";
+	const replacestr = String(pluginParameters['ReplaceStr']) || "";
 	const brstr = pluginParameters['BrStr'] === 'true' || pluginParameters['BrStr'] === true;
 
 	const systemMessage = String(pluginParameters['SystemMessage']) || "Please answer in Japanese.";
@@ -259,20 +294,26 @@
 		let targetVarId = customQuestionMessageVarId !== null ? customQuestionMessageVarId : 0;
 		let variableValue = $gameVariables.value(targetVarId);
 		let userMessage;
+		let displayHeader;
 
 		// 変数IDが未定義の場合は、質問にmessageを反映する
 		if (targetVarId !== 0 && !variableValue) {
 			if (!args.message || args.message === '') { return; }
-			userMessage = args.message;
+			if (!args.message_before) {args.message_before = '';}
+			if (!args.message_after) {args.message_after = '';}
+			userMessage = args.message_before + args.message + args.message_after;
 		} else if (targetVarId === 0 && (!args.message || args.message === '')) {
 			// 変数もmessageも空なら処理から抜ける
-			//console.log("empty");
 			return;
 		} else {
 			// それ以外は変数customQuestionMessageVarIdを質問に反映
-			userMessage = variableValue ? variableValue : args.message;
+			if (!args.message_before) {args.message_before = '';}
+			if (!args.message_after) {args.message_after = '';}
+			userMessage = variableValue ? args.message_before + variableValue + args.message_after : args.message_before + args.message + args.message_after;
 		}
-
+		
+		// 制御文字を処理
+		userMessage = processControlCharacters(userMessage);
 		$gameVariables.setValue(targetVarId, userMessage);
 
 		if (userMessageVarId !== null) {
@@ -287,10 +328,10 @@
 			$gameVariables.setValue(memoryMessageVarId, []);
 			previousMessage = "";
 			customMemoryMessage = [];
-			customMemoryMessage.push({ role: 'system', content: systemMessage });
+			customMemoryMessage.push({ role: 'system', content: processControlCharacters(systemMessage) });
 			// コマンド側systemロールを追加
 			if (args.system) {
-				customMemoryMessage.push({ role: 'system', content: (args.system || "") });
+				customMemoryMessage.push({ role: 'system', content: (processControlCharacters(args.system) || "") });
 			}
 			customMemoryMessage.push({ role: 'user', content: userMessage });
 			$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
@@ -300,9 +341,9 @@
 			if (!Array.isArray(customMemoryMessage)) {
 				customMemoryMessage = [];
 				previousMessage = "";
-				customMemoryMessage.push({ role: 'system', content: systemMessage });
+				customMemoryMessage.push({ role: 'system', content: processControlCharacters(systemMessage) });
 				if (args.system) {
-					customMemoryMessage.push({ role: 'system', content: (args.system || "") });
+					customMemoryMessage.push({ role: 'system', content: (processControlCharacters(args.system) || "") });
 				}
 				customMemoryMessage.push({ role: 'user', content: userMessage });
 			} else {
@@ -379,13 +420,16 @@
 				// イベント実行時にストリーミングウィンドウを表示する
 				const streamingTextElement = document.getElementById('streamingText');
 				if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
+				
 				streamingTextElement.innerHTML = '';
-
 				const reader = response.body.getReader();
 				const textDecoder = new TextDecoder();
 				let buffer = '';
 				let streamBuffer = '';
-				const textArray = [];
+				
+				if (!args.displayHeader) args.displayHeader = "";
+				const preMessage = processControlCharacters(args.displayHeader);
+				const textArray = [preMessage];
 
 				while (true) {
 
@@ -466,7 +510,7 @@
 			const _Scene_Map_update = Scene_Map.prototype.update;
 			Scene_Map.prototype.update = function () {
 				_Scene_Map_update.call(this);
-				if (Input.isTriggered("ok") && streamingTextElement && streamingTextElement.style.display !== "none") {
+				if ((Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) && streamingTextElement && streamingTextElement.style.display !== "none") {
 					unlockControlsIfNeeded();
 				}
 			};
@@ -502,10 +546,11 @@
 		return str.replace(regex, '');
 	}
 
+	// 制御文字を処理する
 	function processControlCharacters(str) {
 		return str.replace(/\\([VNPI])\[(\d+)\]|\\G/g, function (matchedString, type, id) {
 			if (matchedString === '\\G') {
-			  return TextManager.currencyUnit;
+				return TextManager.currencyUnit;
 			}
 			const numId = Number(id);
 			switch (type) {
@@ -521,7 +566,6 @@
 		});
 	}
 
-
 	// 処理終了後のシーン更新処理
 	const _Scene_Map_create = Scene_Map.prototype.create;
 	Scene_Map.prototype.create = function () {
@@ -531,7 +575,7 @@
 	const _Scene_Map_update = Scene_Map.prototype.update;
 	Scene_Map.prototype.update = function () {
 		_Scene_Map_update.call(this);
-		if (Input.isTriggered("ok") && streamingTextElement && streamingTextElement.style.display !== "none") {
+		if ((Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) && streamingTextElement && streamingTextElement.style.display !== "none") {
 			unlockControlsIfNeeded();
 		}
 	};
