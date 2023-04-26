@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.06
+// ChatGPT_APIMZ.js v1.06b
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -31,6 +31,10 @@
 // 2023/04/26 ver1.06 仕様追加
 // 				－displayHeaderにuserMessageを入れられる様にしました。
 //				－画面をリサイズした際にメッセージウィンドウを適切なサイズに調整する様にしました。
+// 2023/04/27 ver1.06b 注釈追加、仕様修正
+//				－ブラウザ版での動作における注意点を追加しました。
+//				－イベント実行時にメッセージウィンドウの配置を初期化する様にしました。
+//				－プレイ画面をY方向にリサイズした時のウィンドウとフォントサイズを改善しました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -250,6 +254,13 @@
  * 直接的なコールは出来ません。
  * 履歴を手動で削除したい場合はこの変数IDの変数を空にしてください。
  * 
+ * 【ブラウザ版での動作について】
+ * 本プラグインで生成されるメッセージウィンドウはHTMLを利用しています。
+ * Webブラウザでプレイする際、メッセージウィンドウがゲーム領域外に
+ * 大きくはみ出して表示される事がありますので、
+ * その際は iframeを記述したHTMLを別途用意し、
+ * その中でツクールが生成したindex.htmlを読み込んでください。
+ * 
  * 【メッセージウィンドウのカスタマイズ】
  * メッセージウィンドウの幅や高さ、位置、背景色をカスタマイズしたい場合は、
  * function createStreamingTextElement() の中身を修正してください。
@@ -261,8 +272,7 @@
  * 【サーバーサイドとの連携】
  * サーバー上にPHPやPython等のファイルを設置し、
  * APIキーなど、ChatGPTへのリクエストヘッダをシークレットにする事が出来ます。
- *
- * ▼PHPサンプルはこちら
+ * * ▼PHPサンプルはこちら
  * https://github.com/kotonoha0109/kotonoha_tkoolMZ_Plugins/blob/main/plugins/php/request.php
  * 
  * PHPファイルにAPIキーを設定し、サーバにアップ後、
@@ -289,6 +299,8 @@
 
 	PluginManager.registerCommand("ChatGPT_APIMZ", "chat", async (args) => {
 
+		// ウィンドウを初期化する
+		updateStreamingTextElement();
 		isDoneReceived = false;
 
 		const temperature = Number(args.temperature) || 1;
@@ -611,6 +623,7 @@
 	}
 
 	// ストリーミングウィンドウの生成
+	// ウィンドウのカスタマイズを行う時は、この関数を変更する
 	function createStreamingTextElement() {
 		const windowHeight = window.innerHeight;
 		const streamingTextHeight = 200;
@@ -653,24 +666,14 @@
 		const adjustedHeight = canvasHeight * scale;
 
 		// 画面サイズに合わせてメッセージウィンドウの幅と高さを調整
-		let streamingTextHeight;
-		if (scaleX > 1 && scaleY > 1) {
-			streamingTextHeight = Math.min(200 * scale, 250);
-		} else {
-			streamingTextHeight = 200 * scaleY;
-		}
+		let streamingTextHeight = Math.min(200 * scale, 250);
 		streamingTextElement.style.width = `${adjustedWidth - 16}px`;
 		streamingTextElement.style.height = `${streamingTextHeight}px`;
 
 		// 画面サイズに合わせてフォントサイズを調整
-		let limitedFontSize;
-		if (scaleX > 1 && scaleY > 1) {
-			limitedFontSize = Math.min(Math.max(22 * scale, 16), 28);
-		} else {
-			limitedFontSize = Math.min(Math.max(22 * scaleY, 16), 28);
-		}
+		let limitedFontSize = Math.min(Math.max(22 * scale, 16), 28);
 		streamingTextElement.style.fontSize = `${limitedFontSize}px`;
-		
+
 		// 画面サイズに合わせてメッセージウィンドウの位置を調整
 		const topPosition = (windowHeight - adjustedHeight) / 2 + adjustedHeight - streamingTextHeight - 16 * scaleY;
 		streamingTextElement.style.top = `${topPosition}px`;
