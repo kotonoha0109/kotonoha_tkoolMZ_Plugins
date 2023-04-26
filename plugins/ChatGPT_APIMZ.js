@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.05
+// ChatGPT_APIMZ.js v1.06
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -28,6 +28,9 @@
 //				－system、messageをMZの制御文字3種（\N、\V、\P）に対応しました。
 //				－messageの前後にmessage_before、message_afterを登録出来る様にしました。
 //				－回答の手前に文字を出力出来る様にしました。
+// 2023/04/26 ver1.06 仕様追加
+// 				－displayHeaderにuserMessageを入れられる様にしました。
+//				－画面をリサイズした際にメッセージウィンドウを適切なサイズに調整する様にしました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -122,6 +125,7 @@
  * @type string
  * @default
  * @desc 回答の手前に表示する内容
+ * userMessage を入れると質問(message)に置き換えられます。
  * 
  * @arg temperature
  * @type Number
@@ -209,6 +213,8 @@
  * # displayHeader
  * メッセージウィンドウに表示するヘッダーです。
  * 変数ID1の値を表示する場合は、\V[1]と入力してください。
+ * また、userMessage を入力すると、message_before、message_afterを
+ * 除いた質問が表示されます。
  * 
  * # temperature, top_p
  * それぞれ、AIからの回答における多様性を決める数値です。
@@ -299,19 +305,21 @@
 		// 変数IDが未定義の場合は、質問にmessageを反映する
 		if (targetVarId !== 0 && !variableValue) {
 			if (!args.message || args.message === '') { return; }
-			if (!args.message_before) {args.message_before = '';}
-			if (!args.message_after) {args.message_after = '';}
+			if (!args.message_before) { args.message_before = ''; }
+			if (!args.message_after) { args.message_after = ''; }
 			userMessage = args.message_before + args.message + args.message_after;
+			userMessage_input = args.message;
 		} else if (targetVarId === 0 && (!args.message || args.message === '')) {
 			// 変数もmessageも空なら処理から抜ける
 			return;
 		} else {
 			// それ以外は変数customQuestionMessageVarIdを質問に反映
-			if (!args.message_before) {args.message_before = '';}
-			if (!args.message_after) {args.message_after = '';}
+			if (!args.message_before) { args.message_before = ''; }
+			if (!args.message_after) { args.message_after = ''; }
 			userMessage = variableValue ? args.message_before + variableValue + args.message_after : args.message_before + args.message + args.message_after;
+			userMessage_input = variableValue ? variableValue : args.message;
 		}
-		
+
 		// 制御文字を処理
 		userMessage = processControlCharacters(userMessage);
 		$gameVariables.setValue(targetVarId, userMessage);
@@ -420,15 +428,16 @@
 				// イベント実行時にストリーミングウィンドウを表示する
 				const streamingTextElement = document.getElementById('streamingText');
 				if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
-				
+
 				streamingTextElement.innerHTML = '';
 				const reader = response.body.getReader();
 				const textDecoder = new TextDecoder();
 				let buffer = '';
 				let streamBuffer = '';
-				
+
 				if (!args.displayHeader) args.displayHeader = "";
-				const preMessage = processControlCharacters(args.displayHeader);
+				let preMessage = processControlCharacters(args.displayHeader);
+				preMessage = preMessage.replace(/userMessage/g, userMessage_input);
 				const textArray = [preMessage];
 
 				while (true) {
@@ -628,5 +637,50 @@
 		document.body.appendChild(streamingTextElement);
 	}
 	createStreamingTextElement();
+
+	// 画面リサイズ時のメッセージウィンドウ調整
+	function updateStreamingTextElement() {
+
+		// ツクールの現在の画面サイズとブラウザの画面サイズを取得
+		const canvasWidth = Graphics.width;
+		const canvasHeight = Graphics.height;
+		const windowWidth = window.innerWidth;
+		const windowHeight = window.innerHeight;
+		const scaleX = windowWidth / canvasWidth;
+		const scaleY = windowHeight / canvasHeight;
+		const scale = Math.min(scaleX, scaleY);
+		const adjustedWidth = canvasWidth * scale;
+		const adjustedHeight = canvasHeight * scale;
+
+		// 画面サイズに合わせてメッセージウィンドウの幅と高さを調整
+		let streamingTextHeight;
+		if (scaleX > 1 && scaleY > 1) {
+			streamingTextHeight = Math.min(200 * scale, 250);
+		} else {
+			streamingTextHeight = 200 * scaleY;
+		}
+		streamingTextElement.style.width = `${adjustedWidth - 16}px`;
+		streamingTextElement.style.height = `${streamingTextHeight}px`;
+
+		// 画面サイズに合わせてフォントサイズを調整
+		let limitedFontSize;
+		if (scaleX > 1 && scaleY > 1) {
+			limitedFontSize = Math.min(Math.max(22 * scale, 16), 28);
+		} else {
+			limitedFontSize = Math.min(Math.max(22 * scaleY, 16), 28);
+		}
+		streamingTextElement.style.fontSize = `${limitedFontSize}px`;
+		
+		// 画面サイズに合わせてメッセージウィンドウの位置を調整
+		const topPosition = (windowHeight - adjustedHeight) / 2 + adjustedHeight - streamingTextHeight - 16 * scaleY;
+		streamingTextElement.style.top = `${topPosition}px`;
+		streamingTextElement.style.left = `${(windowWidth - adjustedWidth) / 2}px`;
+
+	}
+
+	// リサイズをチェック
+	window.addEventListener('resize', () => {
+		updateStreamingTextElement();
+	});
 
 })();
