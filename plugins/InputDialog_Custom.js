@@ -1,12 +1,16 @@
 // --------------------------------------------------------------------------
 // 
-// InputDialog_Custom.js ver1.0
+// InputDialog_Custom.js ver1.0b
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
 // http://opensource.org/licenses/mit-license.php
 //
 // 2023/04/27 ver1.0 公開
+// 2023/04/28 ver1.01 仕様追加
+//             ープラグインパラメータに余分な設定があったので削除
+//             ーカーソルキーでの移動を有効化
+//             ーウェイトに関する記述をヘルプに追記
 // 
 // --------------------------------------------------------------------------
 /*:
@@ -114,11 +118,6 @@
  * @desc ボタンコンテナのマージンを指定します。
  * @default 15px 0 0 0
  * 
- * @param okButtonLavel
- * @text OKボタンの文字
- * @desc OKボタンの文字を指定します。
- * @default OK
- * 
  * @param okButtonWidth
  * @text OKボタンの幅
  * @desc OKボタンの幅を指定します。
@@ -158,11 +157,6 @@
  * @text OKボタンのパディング
  * @desc OKボタンのパディングを指定します。
  * @default 5px 10px
- *
- * @param cancelButtonLavel
- * @text キャンセルボタンの文字
- * @desc キャンセルボタンの文字を指定します。
- * @default キャンセル
  * 
  * @param cancelButtonWidth
  * @text キャンセルボタンの幅
@@ -251,6 +245,12 @@
  * 入力した文字は指定した変数IDに入ります。
  * 空入力、キャンセルの場合は 0 が入ります。
  * 
+ * 【　！注意！　】
+ * プラグインコマンド直後にスクリプトを実行する場合、
+ * スクリプトの方が先に実行されることがあるため、
+ * イベントを上から順番通りに実行させたい場合は、
+ * プラグインコマンドとスクリプトの間に ウェイトを 1フレーム 挟んでください。
+ * 
  */
 
 (() => {
@@ -262,7 +262,7 @@
     event.stopPropagation();
   };
 
-  PluginManager.registerCommand(pluginName, 'openDialog', args => {
+  PluginManager.registerCommand(pluginName, 'openDialog', function (args) {
 
     const varId = Number(args.varId);
     const defaultText = args.defaultText;
@@ -303,8 +303,8 @@
     });
 
     // ウェイト処理
-    $gameMap._interpreter.setWaitMode("time");
-    $gameMap._interpreter._waitCount = 1;
+    //$gameMap._interpreter.setWaitMode("time");
+    //$gameMap._interpreter._waitCount = 15;
 
   });
 
@@ -430,6 +430,16 @@
           input.value = value.slice(0, startPos - 1) + value.slice(startPos);
           input.selectionStart = input.selectionEnd = startPos - 1;
         }
+      } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        // カーソルキーを機能させる
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const startPos = input.selectionStart;
+        const endPos = input.selectionEnd;
+        if (startPos !== null && endPos !== null) {
+          const newPosition = Math.max(Math.min(startPos + direction, input.value.length), 0);
+          input.selectionStart = input.selectionEnd = newPosition;
+        }
       } else if (event.key === "Enter") {
         if (event.shiftKey) {
           // Enter+Shiftで決定動作
@@ -454,7 +464,7 @@
     };
 
     // OKボタンの処理
-    okButton.onclick = () => {
+    okButton.onclick = async () => {
       const inputValue = document.getElementById("textInput").value;
       $gameVariables.setValue(varId, inputValue ? inputValue : '');
       removeHtmlForm();
