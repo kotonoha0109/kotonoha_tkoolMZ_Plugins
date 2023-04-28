@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.06b
+// ChatGPT_APIMZ.js v1.07
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
@@ -13,12 +13,7 @@
 // 2023/04/18 ver1.01b 制御スイッチがONのまま通信を行うと、常時busyが解除される不具合を修正しました。
 // 2023/04/20 ver1.01c 仕様修正
 // 2023/04/21 ver1.02 仕様追加、修正
-//				－プラグインパラメータに「自動改行」「NG文字」を追加しました。
-//				－systemロールの仕様を見直し、精度を向上しました。
-//				－assistantロールの生成方法を修正しました。
 // 2023/04/22 ver1.03 仕様修正
-//				－コードの最適化を行いました。
-//				－ウィンドウカスタマイズに関する記述を追加しました。
 // 2023/04/24 ver1.04 仕様追加、修正
 //				－安定化のため一部のコードを以前の仕様に戻しました。
 //				－HTMLコードの出力に対応しました。
@@ -35,6 +30,11 @@
 //				－ブラウザ版での動作における注意点を追加しました。
 //				－イベント実行時にメッセージウィンドウの配置を初期化する様にしました。
 //				－プレイ画面をY方向にリサイズした時のウィンドウとフォントサイズを改善しました。
+// 2023/04/28 ver1.07 仕様追加、修正
+//				－サポート質問、サポート回答を追加しました。
+//				－assistantロールの生成を回答のタイミングで行う様にしました。
+//				－ウィンドウのスクロールバーが上にある時、Enterキーが機能する様にしました。
+//				－ウィンドウのスクロールバーをカーソルキーで操作出来る様にしました。
 // 
 // --------------------------------------------------------------------------------------
 /*:
@@ -172,6 +172,18 @@
  * @default
  * @desc このイベントの履歴保存を格納する変数ID
  *
+ * @arg support_message
+ * @type multiline_string
+ * @default
+ * @desc サポート質問
+ * このイベントへの質問例を作成します。
+ * 
+ * @arg support_answer
+ * @type multiline_string
+ * @default
+ * @desc サポート回答
+ * サポート質問に対する回答例を作成します。
+ * 
  * @help ChatGPT APIと通信して、AIに台詞を作成してもらうプラグインです。
  * 独自のAPIキーをセットする必要があります。
  *
@@ -313,6 +325,8 @@
 		let variableValue = $gameVariables.value(targetVarId);
 		let userMessage;
 		let displayHeader;
+		let support_message;
+		let support_answer;
 
 		// 変数IDが未定義の場合は、質問にmessageを反映する
 		if (targetVarId !== 0 && !variableValue) {
@@ -365,13 +379,17 @@
 				if (args.system) {
 					customMemoryMessage.push({ role: 'system', content: (processControlCharacters(args.system) || "") });
 				}
+				// サポート質問＆サポート回答をpush
+				if (args.support_message && args.support_answer) {
+					customMemoryMessage.push({ role: 'user', content: (processControlCharacters(args.support_message) || "") });
+					customMemoryMessage.push({ role: 'assistant', content: (processControlCharacters(args.support_answer) || "") });
+				}
 				customMemoryMessage.push({ role: 'user', content: userMessage });
 			} else {
 				const memoryTalk = Number(args.memory_talk) * 2 || 1;
 
 				if (memoryTalk >= 2) {
 					if (previousMessage) {
-						customMemoryMessage.push({ role: 'assistant', content: previousMessage });
 						customMemoryMessage.push({ role: 'user', content: userMessage });
 						while (customMemoryMessage.length > memoryTalk) {
 							customMemoryMessage.shift();
@@ -476,6 +494,9 @@
 								}
 								// 回答を変数IDに代入
 								let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
+								
+								// 回答をassistantロールを代入
+								customMemoryMessage.push({ role: 'assistant', content: previousMessage });
 								$gameVariables.setValue(targetAnswerVarId, previousMessage);
 								// イベント再開
 								isDoneReceived = true;
@@ -532,7 +553,14 @@
 			Scene_Map.prototype.update = function () {
 				_Scene_Map_update.call(this);
 				if ((Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) && streamingTextElement && streamingTextElement.style.display !== "none") {
-					unlockControlsIfNeeded();
+					if (isScrollAtEnd(streamingTextElement)) {
+						unlockControlsIfNeeded();
+					} else {
+						streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
+						if (isScrollAtEnd(streamingTextElement)) {
+							unlockControlsIfNeeded();
+						}
+					}
 				}
 			};
 
@@ -593,11 +621,24 @@
 		_Scene_Map_create.call(this);
 	};
 
+	const scrollSpeed = 30; // スクロール速度を調整するための定数
 	const _Scene_Map_update = Scene_Map.prototype.update;
 	Scene_Map.prototype.update = function () {
 		_Scene_Map_update.call(this);
-		if ((Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) && streamingTextElement && streamingTextElement.style.display !== "none") {
-			unlockControlsIfNeeded();
+		if (streamingTextElement && streamingTextElement.style.display !== "none") {
+			if (Input.isPressed("up")) {
+				streamingTextElement.scrollTop -= scrollSpeed;
+			} else if (Input.isPressed("down")) {
+				streamingTextElement.scrollTop += scrollSpeed;
+			}
+
+			if ((Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) && isScrollAtEnd(streamingTextElement)) {
+				unlockControlsIfNeeded();
+			} else {
+				if (Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) {
+					streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
+				}
+			}
 		}
 	};
 
@@ -606,6 +647,10 @@
 		const isElementVisible = streamingTextElement && streamingTextElement.style.display !== "none";
 		return _Game_Map_isEventRunning.call(this) || isElementVisible;
 	};
+
+	function isScrollAtEnd(element) {
+		return element.scrollTop + element.clientHeight >= element.scrollHeight;
+	}
 
 	// イベント再開処理
 	function unlockControlsIfNeeded() {
