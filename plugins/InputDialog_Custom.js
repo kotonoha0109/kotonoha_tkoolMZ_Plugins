@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------
 // 
-// InputDialog_Custom.js ver1.0b
+// InputDialog_Custom.js ver1.01
 //
 // Copyright (c) kotonoha*
 // This software is released under the MIT License.
