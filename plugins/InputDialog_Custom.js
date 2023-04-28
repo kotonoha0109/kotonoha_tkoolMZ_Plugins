@@ -1,8 +1,8 @@
 // --------------------------------------------------------------------------
 // 
-// InputDialog_Custom.js ver1.01
+// InputDialog_Custom.js ver1.02
 //
-// Copyright (c) kotonoha*
+// Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
 // http://opensource.org/licenses/mit-license.php
 //
@@ -11,6 +11,9 @@
 //             ープラグインパラメータに余分な設定があったので削除
 //             ーカーソルキーでの移動を有効化
 //             ーウェイトに関する記述をヘルプに追記
+// 2023/04/29 ver1.02 仕様追加
+//             ー最大文字数を指定できる様に変更
+//             ー余分なコードを削除
 // 
 // --------------------------------------------------------------------------
 /*:
@@ -233,6 +236,11 @@
  * @text キャンセルボタンの文字
  * @desc キャンセルボタンの文字を指定します。
  * @default キャンセル
+ *
+ * @arg maxLength
+ * @text 最大文字数
+ * @desc 入力可能な最大文字数を指定します。
+ * @default 64
  * 
  * @help
  * プラグインコマンドで「InputDialog_Custom」を選び、
@@ -269,9 +277,10 @@
     const defaultValue = args.defaultValue;
     const okButtonLavel = args.okButtonLavel;
     const cancelButtonLavel = args.cancelButtonLavel;
+    const maxLength = args.maxLength;
 
     // キャンバスの配置
-    const form = createHtmlForm(varId, defaultValue, defaultText, okButtonLavel, cancelButtonLavel);
+    const form = createHtmlForm(varId, defaultValue, defaultText, okButtonLavel, cancelButtonLavel, maxLength);
 
     // スマホ用おまじない
     form.addEventListener('touchstart', stopPropagation);
@@ -302,14 +311,10 @@
       document.head.removeChild(style);
     });
 
-    // ウェイト処理
-    //$gameMap._interpreter.setWaitMode("time");
-    //$gameMap._interpreter._waitCount = 15;
-
   });
 
   // キャンバスの作成
-  function createHtmlForm(varId, defaultValue, defaultText, okButtonLavel, cancelButtonLavel) {
+  function createHtmlForm(varId, defaultValue, defaultText, okButtonLavel, cancelButtonLavel, maxLength) {
 
     const form = document.createElement("form");
     const labelText = document.createElement("div");
@@ -324,6 +329,7 @@
     input.id = "textInput";
     input.type = "text";
     input.inputmode = "text";
+    input.maxLength = maxLength;
     okButton.type = "button";
     cancelButton.type = "button";
 
@@ -452,7 +458,6 @@
         }
       }
     });
-
 
     // BackSpaceキーの無効化
     const _Input_onKeyDown = Input._onKeyDown;
