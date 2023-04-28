@@ -1,8 +1,8 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.07
+// ChatGPT_APIMZ.js v1.08
 //
-// Copyright (c) kotonoha*
+// Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
 // http://opensource.org/licenses/mit-license.php
 //
@@ -35,7 +35,10 @@
 //				－assistantロールの生成を回答のタイミングで行う様にしました。
 //				－ウィンドウのスクロールバーが上にある時、Enterキーが機能する様にしました。
 //				－ウィンドウのスクロールバーをカーソルキーで操作出来る様にしました。
-// 
+// 2023/04/29 ver1.08 仕様追加、修正
+//				－memory_talk以外の回答にも、サポート質問、サポート回答を反映する様にしました。
+//				－ヘルプを追記、修正しました。
+//
 // --------------------------------------------------------------------------------------
 /*:
  * @target MZ
@@ -266,6 +269,14 @@
  * 直接的なコールは出来ません。
  * 履歴を手動で削除したい場合はこの変数IDの変数を空にしてください。
  * 
+ * # support_message, support_answer
+ * 会話の例文を作成します。
+ * AIが返答する際、この例文を参考にして返答します。
+ * support_messageに「自己紹介」
+ * support_answerに「アタシはシャム猫！　５歳にゃっ！」
+ * この様に入力すると、次の会話以降はsupport_answerの例文を参考にするので、
+ * 一人称が「アタシ」で、語尾を「にゃっ」にした返答がされやすくなります。
+ * 
  * 【ブラウザ版での動作について】
  * 本プラグインで生成されるメッセージウィンドウはHTMLを利用しています。
  * Webブラウザでプレイする際、メッセージウィンドウがゲーム領域外に
@@ -277,14 +288,13 @@
  * メッセージウィンドウの幅や高さ、位置、背景色をカスタマイズしたい場合は、
  * function createStreamingTextElement() の中身を修正してください。
  * ウィンドウ調整ツールをご利用ください。
- * 
  * ▼ウィンドウ調整ツール
  * https://aokikotori.com/chatgpt_apimz_window/
  * 
  * 【サーバーサイドとの連携】
  * サーバー上にPHPやPython等のファイルを設置し、
  * APIキーなど、ChatGPTへのリクエストヘッダをシークレットにする事が出来ます。
- * * ▼PHPサンプルはこちら
+ * ▼PHPサンプルはこちら
  * https://github.com/kotonoha0109/kotonoha_tkoolMZ_Plugins/blob/main/plugins/php/request.php
  * 
  * PHPファイルにAPIキーを設定し、サーバにアップ後、
@@ -354,10 +364,10 @@
 			$gameVariables.setValue(userMessageVarId, userMessage);
 		}
 
-		// 記憶関連処理
 		const customMemoryMessageVarId = Number(args.CustomMemoryMessageVarId) || memoryMessageVarId;
 		let customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
 
+		// 記憶関連を行わない処理
 		if (Number(args.CustomMemoryMessageVarId) === 0 || !args.memory_talk) {
 			$gameVariables.setValue(memoryMessageVarId, []);
 			previousMessage = "";
@@ -367,8 +377,15 @@
 			if (args.system) {
 				customMemoryMessage.push({ role: 'system', content: (processControlCharacters(args.system) || "") });
 			}
+			// サポート質問＆サポート回答をpush
+			if (args.support_message && args.support_answer) {
+				customMemoryMessage.push({ role: 'user', content: (processControlCharacters(args.support_message) || "") });
+				customMemoryMessage.push({ role: 'assistant', content: (processControlCharacters(args.support_answer) || "") });
+			}
 			customMemoryMessage.push({ role: 'user', content: userMessage });
 			$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
+
+		// 記憶会話を行う処理
 		} else {
 			customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
 
@@ -376,6 +393,7 @@
 				customMemoryMessage = [];
 				previousMessage = "";
 				customMemoryMessage.push({ role: 'system', content: processControlCharacters(systemMessage) });
+				// コマンド側systemロールを追加
 				if (args.system) {
 					customMemoryMessage.push({ role: 'system', content: (processControlCharacters(args.system) || "") });
 				}
@@ -494,7 +512,7 @@
 								}
 								// 回答を変数IDに代入
 								let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
-								
+
 								// 回答をassistantロールを代入
 								customMemoryMessage.push({ role: 'assistant', content: previousMessage });
 								$gameVariables.setValue(targetAnswerVarId, previousMessage);
