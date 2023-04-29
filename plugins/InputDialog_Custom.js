@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------
 // 
-// InputDialog_Custom.js ver1.02
+// InputDialog_Custom.js ver1.03
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -14,6 +14,8 @@
 // 2023/04/29 ver1.02 仕様追加
 //             ー最大文字数を指定できる様に変更
 //             ー余分なコードを削除
+// 2023/04/29 ver1.03 仕様追加
+//             ーフォントファイルを指定できる様に変更
 // 
 // --------------------------------------------------------------------------
 /*:
@@ -21,6 +23,13 @@
  * @plugindesc ゲーム内に文字入力ウィンドウを配置するプラグイン
  * オリジナルの入力ウィンドウを作成出来ます。
  *
+ * @param fontFileName
+ * @text フォントファイル名
+ * @desc 使用するフォントのファイル名を指定します。
+ * 拡張子まで入れてください。
+ * @type string
+ * @default 
+ * 
  * @param formWidth
  * @text フォームの幅
  * @desc フォームの幅を指定します。
@@ -265,10 +274,30 @@
 
   const pluginName = 'InputDialog_Custom';
   const parameters = PluginManager.parameters("InputDialog_Custom");
+  const fontFileName = parameters['fontFileName'] || '';
 
   const stopPropagation = (event) => {
     event.stopPropagation();
   };
+
+  const style = document.createElement('style');
+
+  if (fontFileName && fontFileName.trim() !== '') {
+
+    const _Scene_Boot_loadGameFonts = Scene_Boot.prototype.loadGameFonts;
+    Scene_Boot.prototype.loadGameFonts = function () {
+      _Scene_Boot_loadGameFonts.call(this);
+      FontManager.load('customFont', fontFileName);
+    };
+
+    const font = new FontFace('customFont', 'url("./fonts/' + fontFileName + '")');
+    document.fonts.add(font);
+    font.load().then(() => {
+      style.textContent = `form, input, button {font-family: 'customFont';}`;
+      document.head.appendChild(style);
+    });
+
+  }
 
   PluginManager.registerCommand(pluginName, 'openDialog', function (args) {
 
