@@ -38,6 +38,9 @@
 // 2023/04/29 ver1.08 仕様追加、修正
 //				－memory_talk以外の回答にも、サポート質問、サポート回答を反映する様にしました。
 //				－ヘルプを追記、修正しました。
+// 2023/05/01 ver1.09 仕様修正
+//				－メッセージウィンドウの表示タイミングを早めました。
+//				－セーブデータから再開した時に、memory_talkの最初の会話が反応しない不具合を修正しました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -338,6 +341,10 @@
 		let support_message;
 		let support_answer;
 
+		const streamingTextElement = document.getElementById('streamingText');
+		if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
+		streamingTextElement.innerHTML = '';
+
 		// 変数IDが未定義の場合は、質問にmessageを反映する
 		if (targetVarId !== 0 && !variableValue) {
 			if (!args.message || args.message === '') { return; }
@@ -407,12 +414,12 @@
 				const memoryTalk = Number(args.memory_talk) * 2 || 1;
 
 				if (memoryTalk >= 2) {
-					if (previousMessage) {
+					//if (previousMessage) {
 						customMemoryMessage.push({ role: 'user', content: userMessage });
 						while (customMemoryMessage.length > memoryTalk) {
 							customMemoryMessage.shift();
 						}
-					}
+					//}
 				}
 			}
 			$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
@@ -474,10 +481,10 @@
 				}
 
 				// イベント実行時にストリーミングウィンドウを表示する
-				const streamingTextElement = document.getElementById('streamingText');
-				if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
+				//const streamingTextElement = document.getElementById('streamingText');
+				//if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
 
-				streamingTextElement.innerHTML = '';
+				//streamingTextElement.innerHTML = '';
 				const reader = response.body.getReader();
 				const textDecoder = new TextDecoder();
 				let buffer = '';
@@ -538,7 +545,6 @@
 								textArray.push(assistantMessage);
 								const combinedText = textArray.join('');
 								const processedText = processControlCharacters(combinedText);
-
 								streamingTextElement.innerHTML = processedText;
 								//console.log(textArray);
 
