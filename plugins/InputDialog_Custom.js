@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------
 // 
-// InputDialog_Custom.js ver1.03
+// InputDialog_Custom.js ver1.03b
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -16,6 +16,8 @@
 //             ー余分なコードを削除
 // 2023/04/29 ver1.03 仕様追加
 //             ーフォントファイルを指定できる様に変更
+// 2023/05/01 ver1.03b 仕様修正
+//             ーフォントのロードが重複していたのでコメントアウト
 // 
 // --------------------------------------------------------------------------
 /*:
@@ -292,10 +294,10 @@
 
     const font = new FontFace('customFont', 'url("./fonts/' + fontFileName + '")');
     document.fonts.add(font);
-    font.load().then(() => {
-      style.textContent = `form, input, button {font-family: 'customFont';}`;
-      document.head.appendChild(style);
-    });
+    //font.load().then(() => { // 表示にタイムラグが発生する場合はここのコメントアウト除去
+    style.textContent = `form, input, button {font-family: 'customFont';}`;
+    document.head.appendChild(style);
+    //}); // 表示にタイムラグが発生する場合はここのコメントアウト除去　
 
   }
 
