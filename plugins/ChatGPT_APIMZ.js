@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.08
+// ChatGPT_APIMZ.js v1.10
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -15,14 +15,7 @@
 // 2023/04/21 ver1.02 仕様追加、修正
 // 2023/04/22 ver1.03 仕様修正
 // 2023/04/24 ver1.04 仕様追加、修正
-//				－安定化のため一部のコードを以前の仕様に戻しました。
-//				－HTMLコードの出力に対応しました。
-//				－MZの制御文字3種（\N、\V、\P）の出力に対応しました。
 // 2023/04/25 ver1.05 仕様追加、修正
-//				－NG文字が空の時でもカギ括弧が非表示になる不具合を修正しました。
-//				－system、messageをMZの制御文字3種（\N、\V、\P）に対応しました。
-//				－messageの前後にmessage_before、message_afterを登録出来る様にしました。
-//				－回答の手前に文字を出力出来る様にしました。
 // 2023/04/26 ver1.06 仕様追加
 // 				－displayHeaderにuserMessageを入れられる様にしました。
 //				－画面をリサイズした際にメッセージウィンドウを適切なサイズに調整する様にしました。
@@ -41,6 +34,8 @@
 // 2023/05/01 ver1.09 仕様修正
 //				－メッセージウィンドウの表示タイミングを早めました。
 //				－セーブデータから再開した時に、memory_talkの最初の会話が反応しない不具合を修正しました。
+// 2023/05/05 ver1.10 仕様修正
+//				－memory_talkの設定回数を超えた時にsystemロールが削除される不具合を修正しました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -392,7 +387,7 @@
 			customMemoryMessage.push({ role: 'user', content: userMessage });
 			$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
 
-		// 記憶会話を行う処理
+			// 記憶会話を行う処理
 		} else {
 			customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
 
@@ -410,17 +405,31 @@
 					customMemoryMessage.push({ role: 'assistant', content: (processControlCharacters(args.support_answer) || "") });
 				}
 				customMemoryMessage.push({ role: 'user', content: userMessage });
-			} else {
-				const memoryTalk = Number(args.memory_talk) * 2 || 1;
 
-				if (memoryTalk >= 2) {
-					//if (previousMessage) {
-						customMemoryMessage.push({ role: 'user', content: userMessage });
-						while (customMemoryMessage.length > memoryTalk) {
-							customMemoryMessage.shift();
+			} else {
+
+				// 記憶会話を行う処理
+				const memoryTalk = Number(args.memory_talk) * 2 || 1;
+				customMemoryMessage.push({ role: 'user', content: userMessage });
+
+				while (true) {
+					let userCount = customMemoryMessage.filter(item => item.role === 'user').length;
+					let assistantCount = customMemoryMessage.filter(item => item.role === 'assistant').length;
+
+					if (userCount + assistantCount > memoryTalk) {
+						let userIndex = customMemoryMessage.findIndex(item => item.role === 'user');
+						let assistantIndex = customMemoryMessage.findIndex(item => item.role === 'assistant');
+
+						if (userIndex >= 0 && assistantIndex >= 0) {
+							customMemoryMessage.splice(Math.min(userIndex, assistantIndex), 2);
+						} else {
+							break;
 						}
-					//}
+					} else {
+						break;
+					}
 				}
+
 			}
 			$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
 		}
