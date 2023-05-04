@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------
 // 
-// InputDialog_Custom.js ver1.03b
+// InputDialog_Custom.js ver1.04
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -18,6 +18,8 @@
 //             ーフォントファイルを指定できる様に変更
 // 2023/05/01 ver1.03b 仕様修正
 //             ーフォントのロードが重複していたのでコメントアウト
+// 2023/05/05 ver1.04 仕様修正
+//             ーウィンドウ出力中の待機処理を改善
 // 
 // --------------------------------------------------------------------------
 /*:
@@ -265,10 +267,9 @@
  * 空入力、キャンセルの場合は 0 が入ります。
  * 
  * 【　！注意！　】
- * プラグインコマンド直後にスクリプトを実行する場合、
- * スクリプトの方が先に実行されることがあるため、
- * イベントを上から順番通りに実行させたい場合は、
- * プラグインコマンドとスクリプトの間に ウェイトを 1フレーム 挟んでください。
+ * プラグインコマンド直後に別のプラグインやスクリプトを実行する場合、
+ * 同時に実行されることがあります。順番通り実行させたい場合は、
+ * このプラグインコマンドと次のイベントの間に ウェイトを 数フレーム 挟んでください。
  * 
  */
 
@@ -301,7 +302,22 @@
 
   }
 
+  const _Game_Interpreter_updateWaitMode = Game_Interpreter.prototype.updateWaitMode;
+  Game_Interpreter.prototype.updateWaitMode = function() {
+    if (this._waitMode === "waitInputForm") {
+      const form = document.getElementById("inputForm");
+      if (!form) {
+        this.setWaitMode("");
+        return false;
+      }
+      return true;
+    }
+    return _Game_Interpreter_updateWaitMode.call(this);
+  };
+  
   PluginManager.registerCommand(pluginName, 'openDialog', function (args) {
+
+    $gameMap._interpreter.setWaitMode('waitInputForm');
 
     const varId = Number(args.varId);
     const defaultText = args.defaultText;
@@ -526,17 +542,8 @@
     if (form) {
       form.removeEventListener('touchstart', stopPropagation);
       document.body.removeChild(form);
+      $gameMap._interpreter.setWaitMode("");
     }
   }
-
-  // フォーム表示中の更新処理無効化
-  const _SceneManager_update = SceneManager.update;
-  SceneManager.update = function (sceneActive) {
-    const form = document.getElementById("inputForm");
-    if (form) {
-      sceneActive = false;
-    }
-    _SceneManager_update.call(this, sceneActive);
-  };
 
 })();
