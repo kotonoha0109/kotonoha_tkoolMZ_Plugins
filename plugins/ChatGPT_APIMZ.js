@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.10
+// ChatGPT_APIMZ.js v1.11
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -36,6 +36,9 @@
 //				－セーブデータから再開した時に、memory_talkの最初の会話が反応しない不具合を修正しました。
 // 2023/05/05 ver1.10 仕様修正
 //				－memory_talkの設定回数を超えた時にsystemロールが削除される不具合を修正しました。
+// 2023/05/06 ver1.11 仕様修正
+//				－memory_talkを使わない回答が変数に入らない不具合を修正しました。
+//				－回答待機中の処理を調整しました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -387,7 +390,6 @@
 			customMemoryMessage.push({ role: 'user', content: userMessage });
 			$gameVariables.setValue(memoryMessageVarId, customMemoryMessage);
 
-			// 記憶会話を行う処理
 		} else {
 			customMemoryMessage = $gameVariables.value(customMemoryMessageVarId);
 
@@ -443,16 +445,13 @@
 
 			// 非出力スイッチがOFFの時はイベントは停止する
 			if ($gameSwitches.value(visibleSwitchID) !== true) {
-				originalCanMove = Game_Player.prototype.canMove;
-				originalIsMenuEnabled = Game_System.prototype.isMenuEnabled;
-				Game_Player.prototype.canMove = function () { return false; };
-				Game_System.prototype.isMenuEnabled = function () { return false; };
+				$gameMap._interpreter.setWaitMode('wait_ChatGPT');
 				// ストリーミング中はイベントの動きを停止
 				const event = $gameMap.event($gameMap._interpreter.eventId());
 				currentEvent = event;
-				event.setDirectionFix(true); // 向き固定
-				event._originalMoveType = event._moveType; // イベントの移動タイプを保存
-				event._moveType = 0; // 停止
+				event.setDirectionFix(true);
+				event._originalMoveType = event._moveType;
+				event._moveType = 0;
 			}
 
 			// ChatGPT APIとの通信
@@ -489,11 +488,7 @@
 					return;
 				}
 
-				// イベント実行時にストリーミングウィンドウを表示する
-				//const streamingTextElement = document.getElementById('streamingText');
-				//if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
-
-				//streamingTextElement.innerHTML = '';
+				// イベント実行
 				const reader = response.body.getReader();
 				const textDecoder = new TextDecoder();
 				let buffer = '';
@@ -523,12 +518,9 @@
 
 							// ストリーミングテキストの終端に達した時はイベントを再開
 							if (line.includes('[DONE]')) {
-								if (Number(args.CustomMemoryMessageVarId) !== 0 && args.memory_talk) {
-									previousMessage = streamBuffer;
-								}
+								previousMessage = streamBuffer;
 								// 回答を変数IDに代入
 								let targetAnswerVarId = customAnswerMessageVarId !== null ? customAnswerMessageVarId : answerMessageVarId;
-
 								// 回答をassistantロールを代入
 								customMemoryMessage.push({ role: 'assistant', content: previousMessage });
 								$gameVariables.setValue(targetAnswerVarId, previousMessage);
@@ -576,33 +568,6 @@
 				return;
 			}
 
-			// メッセージウィンドウ表示中はbusy状態にする
-			const _Scene_Map_create = Scene_Map.prototype.create;
-			Scene_Map.prototype.create = function () {
-				_Scene_Map_create.call(this);
-			};
-
-			const _Scene_Map_update = Scene_Map.prototype.update;
-			Scene_Map.prototype.update = function () {
-				_Scene_Map_update.call(this);
-				if ((Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) && streamingTextElement && streamingTextElement.style.display !== "none") {
-					if (isScrollAtEnd(streamingTextElement)) {
-						unlockControlsIfNeeded();
-					} else {
-						streamingTextElement.scrollTop = streamingTextElement.scrollHeight;
-						if (isScrollAtEnd(streamingTextElement)) {
-							unlockControlsIfNeeded();
-						}
-					}
-				}
-			};
-
-			const _Game_Map_isEventRunning = Game_Map.prototype.isEventRunning;
-			Game_Map.prototype.isEventRunning = function () {
-				const isElementVisible = streamingTextElement && streamingTextElement.style.display !== "none";
-				return _Game_Map_isEventRunning.call(this) || isElementVisible;
-			};
-
 		})();
 
 	});
@@ -648,6 +613,20 @@
 		});
 	}
 
+	// ウェイトモードの実装
+	const _Game_Interpreter_updateWaitMode = Game_Interpreter.prototype.updateWaitMode;
+	Game_Interpreter.prototype.updateWaitMode = function () {
+		if (this._waitMode === "waitChatGPT") {
+			const streamingTextElement = document.getElementById("streamingText");
+			if (!streamingTextElement) {
+				this.setWaitMode("");
+				return false;
+			}
+			return true;
+		}
+		return _Game_Interpreter_updateWaitMode.call(this);
+	};
+
 	// 処理終了後のシーン更新処理
 	const _Scene_Map_create = Scene_Map.prototype.create;
 	Scene_Map.prototype.create = function () {
@@ -664,7 +643,6 @@
 			} else if (Input.isPressed("down")) {
 				streamingTextElement.scrollTop += scrollSpeed;
 			}
-
 			if ((Input.isTriggered("ok") || Input.isTriggered("cancel") || TouchInput.isCancelled()) && isScrollAtEnd(streamingTextElement)) {
 				unlockControlsIfNeeded();
 			} else {
@@ -695,8 +673,7 @@
 				currentEvent._moveType = currentEvent._originalMoveType;
 				currentEvent = null;
 			}
-			Game_Player.prototype.canMove = originalCanMove;
-			Game_System.prototype.isMenuEnabled = originalIsMenuEnabled;
+			$gameMap._interpreter.setWaitMode('');
 		}
 	}
 
