@@ -1,28 +1,12 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.11
+// ChatGPT_APIMZ.js v1.2
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
 // http://opensource.org/licenses/mit-license.php
 //
 // 2023/04/13 ver1.0β プラグイン公開
-// 2023/04/17 ver1.0 正式公開。仕様追加、修正
-// 2023/04/18 ver1.01 仕様追加、修正
-// 2023/04/18 ver1.01a エラー出力方法修正
-// 2023/04/18 ver1.01b 制御スイッチがONのまま通信を行うと、常時busyが解除される不具合を修正しました。
-// 2023/04/20 ver1.01c 仕様修正
-// 2023/04/21 ver1.02 仕様追加、修正
-// 2023/04/22 ver1.03 仕様修正
-// 2023/04/24 ver1.04 仕様追加、修正
-// 2023/04/25 ver1.05 仕様追加、修正
-// 2023/04/26 ver1.06 仕様追加
-// 				－displayHeaderにuserMessageを入れられる様にしました。
-//				－画面をリサイズした際にメッセージウィンドウを適切なサイズに調整する様にしました。
-// 2023/04/27 ver1.06b 注釈追加、仕様修正
-//				－ブラウザ版での動作における注意点を追加しました。
-//				－イベント実行時にメッセージウィンドウの配置を初期化する様にしました。
-//				－プレイ画面をY方向にリサイズした時のウィンドウとフォントサイズを改善しました。
 // 2023/04/28 ver1.07 仕様追加、修正
 //				－サポート質問、サポート回答を追加しました。
 //				－assistantロールの生成を回答のタイミングで行う様にしました。
@@ -39,6 +23,9 @@
 // 2023/05/06 ver1.11 仕様修正
 //				－memory_talkを使わない回答が変数に入らない不具合を修正しました。
 //				－回答待機中の処理を調整しました。
+// 2023/05/09 ver1.2 仕様追加
+//				－プラグインパラメータにカスタムフォントを設定できる様にしました。
+//				－プラグインコマンドにキャラ名、顔グラフィック、およびインデックスを設定できる様にしました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -102,6 +89,12 @@
  * @default Please answer in Japanese.
  * @desc AIへの共通の指示（「日本語で書いて」とか「120文字以内でまとめて」とか）
  *
+ * @param FontFileName
+ * @desc 使用するフォントのファイル名を指定します。
+ * 拡張子まで入れてください。
+ * @type string
+ * @default 
+ * 
  * @command chat
  * @text Send Chat Message
  * @desc APIに問い合わせるコマンド
@@ -187,6 +180,25 @@
  * @default
  * @desc サポート回答
  * サポート質問に対する回答例を作成します。
+ * 
+ * @arg characterName
+ * @type string
+ * @default
+ * @desc キャラクター名
+ * メッセージウィンドウ上に表示します。
+ * 
+ * @arg faceImage
+ * @type file
+ * @default
+ * @desc キャラクターの顔グラフィック
+ * 非表示の場合は空欄にしてください。
+ * @dir img/faces/
+ * 
+ * @arg faceIndex
+ * @type number
+ * @default
+ * @desc 顔グラフィックのインデックス
+ * ツクールMZの仕様では左上が0〜3、右下が4〜7になります。
  * 
  * @help ChatGPT APIと通信して、AIに台詞を作成してもらうプラグインです。
  * 独自のAPIキーをセットする必要があります。
@@ -278,6 +290,13 @@
  * この様に入力すると、次の会話以降はsupport_answerの例文を参考にするので、
  * 一人称が「アタシ」で、語尾を「にゃっ」にした返答がされやすくなります。
  * 
+ * # characterName, faceName, faceIndex
+ * キャラクターの名前、顔グラフィックと、その表示インデックスを設定します。
+ * 顔グラフィックは、img/faces/にあるファイル名を入力してください。
+ * 顔グラフィックを表示しない場合は、空にしてください。
+ * インデックスは、顔グラフィックの左から何番目かを設定します。
+ * 一段目は0〜3、二段目は4〜7となります。
+ * 
  * 【ブラウザ版での動作について】
  * 本プラグインで生成されるメッセージウィンドウはHTMLを利用しています。
  * Webブラウザでプレイする際、メッセージウィンドウがゲーム領域外に
@@ -313,12 +332,28 @@
 	const visibleSwitchID = Number(pluginParameters['VisibleSwitchID']) || null;
 	const replacestr = String(pluginParameters['ReplaceStr']) || "";
 	const brstr = pluginParameters['BrStr'] === 'true' || pluginParameters['BrStr'] === true;
-
 	const systemMessage = String(pluginParameters['SystemMessage']) || "Please answer in Japanese.";
+	const fontFileName = pluginParameters['FontFileName'] || '';
+
 	let previousMessage = null;
 	let isDoneReceived = false;
-	let originalCanMove;
-	let originalIsMenuEnabled;
+	let isFontLoaded = false;
+
+	// カスタムフォントの設定
+	if (fontFileName && fontFileName.trim() !== '') {
+		const _Scene_Boot_loadGameFonts = Scene_Boot.prototype.loadGameFonts;
+		Scene_Boot.prototype.loadGameFonts = function () {
+			_Scene_Boot_loadGameFonts.call(this);
+			FontManager.load('customFont', fontFileName);
+		};
+		const font = new FontFace('customFont', 'url("./fonts/' + fontFileName + '")');
+		document.fonts.add(font);
+		font.load().then(() => {
+			addCustomFontStyle();
+		}).catch((error) => {
+			console.error('フォントをロード出来ません：', error);
+		});
+	}
 
 	PluginManager.registerCommand("ChatGPT_APIMZ", "chat", async (args) => {
 
@@ -338,10 +373,9 @@
 		let displayHeader;
 		let support_message;
 		let support_answer;
-
-		const streamingTextElement = document.getElementById('streamingText');
-		if ($gameSwitches.value(visibleSwitchID) !== true) { streamingTextElement.style.display = 'block'; }
-		streamingTextElement.innerHTML = '';
+		let faceImage = args.faceImage !== undefined ? String(args.faceImage) : null;
+		let faceIndex = Number(args.faceIndex) || 0;
+		let characterName = String(args.characterName) || '';
 
 		// 変数IDが未定義の場合は、質問にmessageを反映する
 		if (targetVarId !== 0 && !variableValue) {
@@ -436,6 +470,13 @@
 			$gameVariables.setValue(customMemoryMessageVarId, customMemoryMessage);
 		}
 
+		const streamingTextElement = document.getElementById('streamingText');
+		addCustomFontStyle();
+		if ($gameSwitches.value(visibleSwitchID) !== true) {
+			streamingTextElement.style.display = 'block';
+		}
+
+		streamingTextElement.innerHTML = '';
 		//console.log(customMemoryMessage);
 
 		(async () => {
@@ -493,12 +534,33 @@
 				const textDecoder = new TextDecoder();
 				let buffer = '';
 				let streamBuffer = '';
+				let textArray = [];
 
 				if (!args.displayHeader) args.displayHeader = "";
 				let preMessage = processControlCharacters(args.displayHeader);
 				preMessage = preMessage.replace(/userMessage/g, userMessage_input);
-				const textArray = [preMessage];
 
+				// 顔グラフィックの設定
+				if (faceImage !== null && faceImage !== "") {
+					if (!faceIndex) { faceIndex = 0; }
+					const faceWidth = 144;
+					const faceHeight = 144;
+					const facesPerRow = 4;
+					const facesPerCol = 2;
+					const faceX = faceWidth * (faceIndex % facesPerRow);
+					const faceY = faceHeight * Math.floor(faceIndex / facesPerRow);
+					const faceImageUrl = '<img src="img/faces/' + faceImage + '.png" style="object-fit: none; object-position: -' + faceX + 'px -' + faceY + 'px; width: ' + faceWidth + 'px; height: ' + faceHeight + 'px; float: left; margin-right: 20px;">';
+					textArray = [preMessage, faceImageUrl];
+				} else {
+					textArray = [preMessage];
+				}
+
+				// キャラクター名の設定
+				if (args.characterName) {
+					textArray.push(processControlCharacters(args.characterName) + "<br>");
+				}
+
+				// ChatGPTとの通信
 				while (true) {
 
 					const { value, done } = await reader.read();
@@ -533,6 +595,7 @@
 
 							// ストリーミングテキストの表示
 							if (jsonData.choices && jsonData.choices[0].delta && jsonData.choices[0].delta.content) {
+
 								let assistantMessage = jsonData.choices[0].delta.content;
 
 								// ストリームバッファとしてassistantロール用に別途保存
@@ -613,6 +676,16 @@
 		});
 	}
 
+	// カスタムフォントの設定
+	function addCustomFontStyle() {
+		if (!isFontLoaded) {
+			const style = document.createElement('style');
+			style.textContent = `#streamingText {font-family: 'customFont';}`;
+			document.head.appendChild(style);
+			isFontLoaded = true;
+		}
+	}
+
 	// ウェイトモードの実装
 	const _Game_Interpreter_updateWaitMode = Game_Interpreter.prototype.updateWaitMode;
 	Game_Interpreter.prototype.updateWaitMode = function () {
@@ -627,12 +700,7 @@
 		return _Game_Interpreter_updateWaitMode.call(this);
 	};
 
-	// 処理終了後のシーン更新処理
-	const _Scene_Map_create = Scene_Map.prototype.create;
-	Scene_Map.prototype.create = function () {
-		_Scene_Map_create.call(this);
-	};
-
+	// ウィンドウのスクロールおよび開閉を制御する
 	const scrollSpeed = 30; // スクロール速度を調整するための定数
 	const _Scene_Map_update = Scene_Map.prototype.update;
 	Scene_Map.prototype.update = function () {
