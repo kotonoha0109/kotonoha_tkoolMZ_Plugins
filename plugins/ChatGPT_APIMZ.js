@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.2
+// ChatGPT_APIMZ.js v1.21
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -26,6 +26,8 @@
 // 2023/05/09 ver1.2 仕様追加
 //				－プラグインパラメータにカスタムフォントを設定できる様にしました。
 //				－プラグインコマンドにキャラ名、顔グラフィック、およびインデックスを設定できる様にしました。
+// 2023/05/09 ver1.21 緊急修正
+//				－ウェイトモードの制御を修正しました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -486,7 +488,7 @@
 
 			// 非出力スイッチがOFFの時はイベントは停止する
 			if ($gameSwitches.value(visibleSwitchID) !== true) {
-				$gameMap._interpreter.setWaitMode('wait_ChatGPT');
+				$gameMap._interpreter.setWaitMode('waitChatGPT');
 				// ストリーミング中はイベントの動きを停止
 				const event = $gameMap.event($gameMap._interpreter.eventId());
 				currentEvent = event;
@@ -692,7 +694,7 @@
 		if (this._waitMode === "waitChatGPT") {
 			const streamingTextElement = document.getElementById("streamingText");
 			if (!streamingTextElement) {
-				this.setWaitMode("");
+				$gameMap._interpreter.setWaitMode('');
 				return false;
 			}
 			return true;
@@ -742,6 +744,7 @@
 				currentEvent = null;
 			}
 			$gameMap._interpreter.setWaitMode('');
+			isDoneReceived = true;
 		}
 	}
 
