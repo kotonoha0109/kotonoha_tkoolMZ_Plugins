@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.21
+// ChatGPT_APIMZ.js v1.22
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -28,6 +28,9 @@
 //				－プラグインコマンドにキャラ名、顔グラフィック、およびインデックスを設定できる様にしました。
 // 2023/05/09 ver1.21 緊急修正
 //				－ウェイトモードの制御を修正しました。
+// 2023/05/10 ver1.22 仕様修正
+//				－ウェイトモードの制御を改めて調整しました。
+//				－実行されたイベントが向き固定だった際、終了後に元の向きに戻る様にしました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -492,6 +495,7 @@
 				// ストリーミング中はイベントの動きを停止
 				const event = $gameMap.event($gameMap._interpreter.eventId());
 				currentEvent = event;
+				event._originalDirectionFix = event.isDirectionFixed();
 				event.setDirectionFix(true);
 				event._originalMoveType = event._moveType;
 				event._moveType = 0;
@@ -693,8 +697,13 @@
 	Game_Interpreter.prototype.updateWaitMode = function () {
 		if (this._waitMode === "waitChatGPT") {
 			const streamingTextElement = document.getElementById("streamingText");
+			
 			if (!streamingTextElement) {
 				$gameMap._interpreter.setWaitMode('');
+				currentEvent.setDirectionFix(currentEvent._originalDirectionFix);
+				currentEvent._moveType = currentEvent._originalMoveType;
+				currentEvent = null;
+				isDoneReceived = true;
 				return false;
 			}
 			return true;
@@ -739,7 +748,7 @@
 			streamingTextElement.style.display = 'none';
 			streamingTextElement.innerHTML = '';
 			if (typeof currentEvent !== 'undefined' && currentEvent) {
-				currentEvent.setDirectionFix(false);
+				currentEvent.setDirectionFix(currentEvent._originalDirectionFix);
 				currentEvent._moveType = currentEvent._originalMoveType;
 				currentEvent = null;
 			}
