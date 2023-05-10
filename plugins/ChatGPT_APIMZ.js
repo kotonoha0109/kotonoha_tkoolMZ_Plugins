@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.22
+// ChatGPT_APIMZ.js v1.23
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -31,6 +31,8 @@
 // 2023/05/10 ver1.22 仕様修正
 //				－ウェイトモードの制御を改めて調整しました。
 //				－実行されたイベントが向き固定だった際、終了後に元の向きに戻る様にしました。
+// 2023/05/11 ver1.23 仕様修正
+//				－エラーメッセージの出力を日本語化しました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -529,6 +531,7 @@
 					let errorMessage = String(errorJson.error.message).slice(0, 30);
 					// APIからのメッセージを出力
 					console.error('Error:', errorMessage);
+					errorMessage = await getJapaneseErrorMessage(errorMessage);
 					$gameMessage.add(errorMessage);
 					isDoneReceived = true;
 					unlockControlsIfNeeded();
@@ -631,6 +634,7 @@
 			} catch (error) {
 				console.error('Error:', error);
 				let errorMessage = error;
+				errorMessage = await getJapaneseErrorMessage(errorMessage);
 				$gameMessage.add(errorMessage);
 				isDoneReceived = true;
 				unlockControlsIfNeeded();
@@ -697,7 +701,7 @@
 	Game_Interpreter.prototype.updateWaitMode = function () {
 		if (this._waitMode === "waitChatGPT") {
 			const streamingTextElement = document.getElementById("streamingText");
-			
+
 			if (!streamingTextElement) {
 				$gameMap._interpreter.setWaitMode('');
 				currentEvent.setDirectionFix(currentEvent._originalDirectionFix);
@@ -754,6 +758,19 @@
 			}
 			$gameMap._interpreter.setWaitMode('');
 			isDoneReceived = true;
+		}
+	}
+
+	// エラー出力
+	async function getJapaneseErrorMessage(errorMessage) {
+		if (errorMessage.includes("That model is currently")) {
+			return "サーバが混み合っているため、回答が生成出来ません。";
+		} else if (errorMessage.includes("You exceeded your current quota")) {
+			return "APIの制限を超過しました。";
+		} else if (errorMessage.includes("Incorrect API key provided")) {
+			return "APIキーが違います。正しいAPIキーを入力してください。";
+		} else {
+			return errorMessage;
 		}
 	}
 
