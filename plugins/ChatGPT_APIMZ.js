@@ -1,6 +1,6 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.23
+// ChatGPT_APIMZ.js v1.24
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
@@ -33,6 +33,8 @@
 //				－実行されたイベントが向き固定だった際、終了後に元の向きに戻る様にしました。
 // 2023/05/11 ver1.23 仕様修正
 //				－エラーメッセージの出力を日本語化しました。
+// 2023/05/14 ver1.24 仕様修正
+//				－イベントが並列処理で実行された場合、エラーが発生していた問題を修正しました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -496,11 +498,13 @@
 				$gameMap._interpreter.setWaitMode('waitChatGPT');
 				// ストリーミング中はイベントの動きを停止
 				const event = $gameMap.event($gameMap._interpreter.eventId());
-				currentEvent = event;
-				event._originalDirectionFix = event.isDirectionFixed();
-				event.setDirectionFix(true);
-				event._originalMoveType = event._moveType;
-				event._moveType = 0;
+				if (event) {
+					currentEvent = event;
+					event._originalDirectionFix = event.isDirectionFixed();
+					event.setDirectionFix(true);
+					event._originalMoveType = event._moveType;
+					event._moveType = 0;
+				}
 			}
 
 			// ChatGPT APIとの通信
@@ -704,9 +708,11 @@
 
 			if (!streamingTextElement) {
 				$gameMap._interpreter.setWaitMode('');
-				currentEvent.setDirectionFix(currentEvent._originalDirectionFix);
-				currentEvent._moveType = currentEvent._originalMoveType;
-				currentEvent = null;
+				if (typeof currentEvent !== 'undefined' && currentEvent) {
+					currentEvent.setDirectionFix(currentEvent._originalDirectionFix);
+					currentEvent._moveType = currentEvent._originalMoveType;
+					currentEvent = null;
+				}
 				isDoneReceived = true;
 				return false;
 			}
