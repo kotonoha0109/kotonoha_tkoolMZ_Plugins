@@ -1,20 +1,12 @@
 // --------------------------------------------------------------------------------------
 // 
-// ChatGPT_APIMZ.js v1.24
+// ChatGPT_APIMZ.js v1.3
 //
 // Copyright (c) kotonoha*（https://aokikotori.com/）
 // This software is released under the MIT License.
 // http://opensource.org/licenses/mit-license.php
 //
 // 2023/04/13 ver1.0β プラグイン公開
-// 2023/04/28 ver1.07 仕様追加、修正
-//				－サポート質問、サポート回答を追加しました。
-//				－assistantロールの生成を回答のタイミングで行う様にしました。
-//				－ウィンドウのスクロールバーが上にある時、Enterキーが機能する様にしました。
-//				－ウィンドウのスクロールバーをカーソルキーで操作出来る様にしました。
-// 2023/04/29 ver1.08 仕様追加、修正
-//				－memory_talk以外の回答にも、サポート質問、サポート回答を反映する様にしました。
-//				－ヘルプを追記、修正しました。
 // 2023/05/01 ver1.09 仕様修正
 //				－メッセージウィンドウの表示タイミングを早めました。
 //				－セーブデータから再開した時に、memory_talkの最初の会話が反応しない不具合を修正しました。
@@ -35,6 +27,8 @@
 //				－エラーメッセージの出力を日本語化しました。
 // 2023/05/14 ver1.24 仕様修正
 //				－イベントが並列処理で実行された場合、エラーが発生していた問題を修正しました。
+// 2023/05/15 ver1.3 仕様追加
+//				－回答ウィンドウのデザインをパラメータから設定できる様にしました。
 //
 // --------------------------------------------------------------------------------------
 /*:
@@ -103,6 +97,16 @@
  * 拡張子まで入れてください。
  * @type string
  * @default 
+ * 
+ * @param Layouts
+ * @type struct<Layout>[]
+ * @desc ウィンドウデザインを定義します。
+ * LayoutVariableIdの値で表示するウィンドウを切り替えます。
+ * 
+ * @param LayoutVariableId
+ * @type variable
+ * @desc ウィンドウデザインの切り替えに使う変数ID
+ * @default 0
  * 
  * @command chat
  * @text Send Chat Message
@@ -208,7 +212,7 @@
  * @default
  * @desc 顔グラフィックのインデックス
  * ツクールMZの仕様では左上が0〜3、右下が4〜7になります。
- * 
+ *
  * @help ChatGPT APIと通信して、AIに台詞を作成してもらうプラグインです。
  * 独自のAPIキーをセットする必要があります。
  *
@@ -222,15 +226,16 @@
  *
  * (2) 空き変数IDが最低3つ必要です。
  * ・プレイヤーの質問を一時的に変数に入れます。
- * 　空いている変数IDを UserMessageVarId にセットしてください。
+ * 　空いている変数IDをパラメータ UserMessageVarId にセットしてください。
  * ・AIからの回答を一時的に変数に入れます。
- * 　空いている変数IDを AnswerMessageVarId にセットしてください。
+ * 　空いている変数IDをパラメータ AnswerMessageVarId にセットしてください。
  * ・回答履歴を一時的に変数に入れます。
- * 　空いている変数IDを MemoryMessageVarId にセットしてください。
+ * 　空いている変数IDをパラメータ MemoryMessageVarId にセットしてください。
  *
  * (3) AIに台詞を作ってもらいたいイベントに、プラグインコマンドで
  * 「ChatGPT_APIMZ」を選び、キャラクターの設定を登録してください。
  * 
+ * 【プラグインコマンドの解説】
  * # system
  * イベントへの指示です。プラグインパラメータの SystemMessage に追記されますので、
  * このイベントには、それに補足したい指示を与えます。
@@ -329,7 +334,71 @@
  * PHPファイルにAPIキーを設定し、サーバにアップ後、
  * プラグインパラメータのChatGPT_URLをPHPファイルのURLにしてください。
  * プラグインパラメータのChatGPT_APIkeyは不要です。必ず削除願います。
+ */
+
+/*~struct~Layout:
  *
+ * @param template
+ * @text テンプレート
+ * @desc ウィンドウのテンプレートを選択します。
+ * design1〜3はテンプレート、customはユーザが設定します。
+ * @type select
+ * @option custom
+ * @option design1
+ * @option design2
+ * @option design3
+ * @default custom
+ * 
+ * @param color
+ * @text テキスト色
+ * @desc ウィンドウ内のテキストの色です。
+ * @default white
+ * 
+ * @param fontSize
+ * @text フォントサイズ
+ * @desc ウィンドウ内のテキストのフォントサイズです。
+ * @default 22px
+ *
+ * @param padding
+ * @text パディング
+ * @desc ウィンドウ内のテキストのパディングです。
+ * @default 16px
+ * 
+ * @param background
+ * @text 背景
+ * @desc ウィンドウの背景です。色やグラデーションを指定できます。
+ * @default linear-gradient(to bottom, rgba(15,28,69,0.8), rgba(8,59,112,0.8))
+ *
+ * @param boxShadow
+ * @text 影
+ * @desc ウィンドウの影です。
+ * @default 
+ * 
+ * @param margin
+ * @text マージン
+ * @desc ウィンドウのマージンです。
+ * @default 0 8px
+ * 
+ * @param borderColor
+ * @text 枠線の色
+ * @desc ウィンドウの枠線の色です。
+ * @default white
+ *
+ * @param borderWidth
+ * @text 枠線の幅
+ * @desc ウィンドウの枠線の幅です。
+ * @default 2px
+ * 
+ * @param borderStyle
+ * @text 枠線のスタイル
+ * @desc ウィンドウの枠線のスタイルです。
+ * @default solid
+ * 
+ * @param borderRadius
+ * @text 枠線の角丸
+ * @desc ウィンドウの枠線の角丸です。
+ * @default 5px
+ * 
  */
 
 (() => {
@@ -343,6 +412,8 @@
 	const brstr = pluginParameters['BrStr'] === 'true' || pluginParameters['BrStr'] === true;
 	const systemMessage = String(pluginParameters['SystemMessage']) || "Please answer in Japanese.";
 	const fontFileName = pluginParameters['FontFileName'] || '';
+	const layouts = JSON.parse(pluginParameters['Layouts']).map(layout => JSON.parse(layout));
+	const layoutVariableId = Number(pluginParameters['LayoutVariableId']);
 
 	let previousMessage = null;
 	let isDoneReceived = false;
@@ -781,7 +852,6 @@
 	}
 
 	// ストリーミングウィンドウの生成
-	// ウィンドウのカスタマイズを行う時は、この関数を変更する
 	function createStreamingTextElement() {
 		const windowHeight = window.innerHeight;
 		const streamingTextHeight = 200;
@@ -794,6 +864,7 @@
 		streamingTextElement.style.width = '800px';
 		streamingTextElement.style.top = `${windowHeight - streamingTextHeight - 16}px`;
 		streamingTextElement.style.boxSizing = 'border-box';
+		streamingTextElement.style.boxShadow = '';
 		streamingTextElement.style.height = '200px';
 		streamingTextElement.style.color = 'white';
 		streamingTextElement.style.fontSize = '22px';
@@ -805,7 +876,9 @@
 		streamingTextElement.style.borderColor = 'white';
 		streamingTextElement.style.borderRadius = '5px';
 		streamingTextElement.style.overflowY = 'auto';
+		applyLayout();
 		document.body.appendChild(streamingTextElement);
+
 	}
 	createStreamingTextElement();
 
@@ -836,6 +909,7 @@
 		const topPosition = (windowHeight - adjustedHeight) / 2 + adjustedHeight - streamingTextHeight - 16 * scaleY;
 		streamingTextElement.style.top = `${topPosition}px`;
 		streamingTextElement.style.left = `${(windowWidth - adjustedWidth) / 2}px`;
+		applyLayout();
 
 	}
 
@@ -843,5 +917,46 @@
 	window.addEventListener('resize', () => {
 		updateStreamingTextElement();
 	});
+
+	// レイアウトテンプレートの作成
+	function applyLayout() {
+		if (streamingTextElement && $gameVariables) {
+			const layoutIndex = $gameVariables.value(layoutVariableId);
+			if (layoutIndex >= 1 && layoutIndex <= layouts.length) {
+				const layout = layouts[layoutIndex - 1];
+
+				let template;
+				switch (layout.template) {
+					case 'design1':
+						template = { color: '#FFF', background: 'rgba(0, 0, 0, 0.7)', boxShadow: '0 0 0 3px #6d83bf inset', borderColor: 'rgb(165, 207, 239)', borderWidth: '3px', borderStyle: 'solid', borderRadius: '5px' };
+						break;
+					case 'design2':
+						template = { color: '#FFF', background: '#000', borderColor: '#FFF', borderWidth: '5px', borderStyle: 'solid', borderRadius: '12px' };
+						break;
+					case 'design3':
+						template = {
+							color: '#FFF',
+							background: 'linear-gradient(180deg, #7b7bd6 0, #7b7bd6 5%,#7373ce 5%, #7373ce 10%,#6b6bc6 10%, #6b6bc6 15%,#6363bd 15%, #6363bd 20%,#5a5ab5 20%, #5a5ab5 25%,#5252ad 25%, #5252ad 30%,#4a4aa5 30%, #4a4aa5 35%,#42429c 35%, #42429c 40%,#393994 40%, #393994 45%,#31318c 45%, #31318c 50%,#292984 50%, #292984 55%,#21217b 55%, #21217b 60%,#181873 60%, #181873 65%,#10106b 65%, #10106b 70%,#080863 70%, #080863 75%,#00005a 75%, #00005a 80%,#000052 80%, #000052 85%,#00004a 85%, #00004a 90%,#000042 90%, #000042 95%,#000039 95%, #000039 100%)',
+							borderColor: '#FFF', borderWidth: '6px', borderStyle: 'ridge', borderRadius: '12px'
+						};
+						break;
+					default:
+						template = layout;
+						break;
+				}
+
+				streamingTextElement.style.color = template.color;
+				streamingTextElement.style.fontSize = template.fontSize;
+				streamingTextElement.style.padding = template.padding;
+				streamingTextElement.style.background = template.background;
+				streamingTextElement.style.boxShadow = template.boxShadow;
+				streamingTextElement.style.margin = template.margin;
+				streamingTextElement.style.borderColor = template.borderColor;
+				streamingTextElement.style.borderWidth = template.borderWidth;
+				streamingTextElement.style.borderStyle = template.borderStyle;
+				streamingTextElement.style.borderRadius = template.borderRadius;
+			}
+		}
+	}
 
 })();
