@@ -152,7 +152,7 @@
       return;
     }
 
-    UnsplashImageManager.loadBitmapFromUrl(imageUrl).then((bitmap) => {
+    WIOImageManager.loadBitmapFromUrl(imageUrl).then((bitmap) => {
       const sprite = new Sprite();
       sprite.bitmap = bitmap;
       sprite.x = x;
@@ -194,7 +194,7 @@
     }
   });
 
-  const UnsplashImageManager = {
+  const WIOImageManager = {
     loadBitmapFromUrl: function (url) {
       return new Promise((resolve, reject) => {
         const bitmap = Bitmap.load(url);
@@ -218,23 +218,23 @@
   };
 
 
-	function WIO_processControlCharacters(str) {
-		return str.replace(/\\([VNPI])\[(\d+)\]|\\G/g, function (matchedString, type, id) {
-			if (matchedString === '\\G') {
-				return TextManager.currencyUnit;
-			}
-			const numId = Number(id);
-			switch (type) {
-				case 'V':
-					return String($gameVariables.value(numId));
-				case 'N':
-					return String($gameActors.actor(numId).name());
-				case 'P':
-					return String($gameParty.members()[numId - 1].name());
-				default:
-					return '';
-			}
-		});
-	}
+  function WIO_processControlCharacters(str) {
+    return str.replace(/\\([VNPI])\[(\d+)\]|\\G/g, function (matchedString, type, id) {
+      if (matchedString === '\\G') {
+        return TextManager.currencyUnit;
+      }
+      const numId = Number(id);
+      switch (type) {
+        case 'V':
+          return String($gameVariables.value(numId));
+        case 'N':
+          return String($gameActors.actor(numId).name());
+        case 'P':
+          return String($gameParty.members()[numId - 1].name());
+        default:
+          return '';
+      }
+    });
+  }
 
 })();
