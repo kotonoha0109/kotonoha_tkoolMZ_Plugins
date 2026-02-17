@@ -12,6 +12,7 @@
 | InputDialog_Custom.js | キーボードで文字を入力し、入力内容を変数に格納するプラグイン（デザイン可能） |
 | VariableUpdateNotifier.js | 変数が更新された際に画面上にメッセージを出力するプラグイン |
 | WebImageOutput.js | 指定したURLの画像をピクチャとして画面上に表示するプラグイン |
+| LargeEventCollision.js | 大型イベントのグラフィックが壁にめり込むのを防止するプラグイン |
 | php/request.php  | ChatGPT_APIMZ.jsの通信部分をサーバーサイドで動作させるためのPHPスクリプト |
 
 
